@@ -5,28 +5,26 @@ using UnityEngine;
 public class Window : MonoBehaviour
 {
     // Start is called before the first frame update
-    public float x1,x2,y1,y2;
-    
+    public float x1, x2, y1, y2;
+
+    // VARIABEL BARU: Offset Ketinggian Lantai
+    private float floorYOffset; 
+
     GameObject ob;
     public char rotation;
-   
+
     Bounds meshBounds;
     public void setGameObjectReference(GameObject obj)
-
     {
         ob = obj;
     }
 
- 
 
     void Start()
-
     {
-        
-        
         GameObject testPrefab = (GameObject)Resources.Load("windowWall");
         Vector3 coordinates = getCoordinates();
-         rotation = getRotation();
+        rotation = getRotation();
         Quaternion angle = getAngle(rotation);
 
         GameObject prefabInstance = Instantiate(testPrefab, coordinates, angle);
@@ -35,10 +33,7 @@ public class Window : MonoBehaviour
         float midY = y1 + (Mathf.Abs(y2 - y1) / 2);
 
 
-
-
-
-
+        // Asumsi WindowGaps ada
         WindowGaps windowGapsComponent = prefabInstance.AddComponent<WindowGaps>();
         windowGapsComponent.setParentValues(midX * Builder.xScale, midY * Builder.yScale);
         windowGapsComponent.setOrientation(rotation);
@@ -53,15 +48,15 @@ public class Window : MonoBehaviour
         Vector3 scale = getScale();
 
         prefabInstance.transform.localScale = scale;
-        
 
-       BoxCollider mainBox =prefabInstance.AddComponent<BoxCollider>();
+
+        BoxCollider mainBox = prefabInstance.AddComponent<BoxCollider>();
         mainBox.isTrigger = true;
         prefabInstance.AddComponent<BoxCollider>();
         BoxCollider leftMover = prefabInstance.AddComponent<BoxCollider>();
         BoxCollider rightMover = prefabInstance.AddComponent<BoxCollider>();
-       
-        windowGapsComponent.setBoxColliders(mainBox,leftMover, rightMover);
+
+        windowGapsComponent.setBoxColliders(mainBox, leftMover, rightMover);
         /*ob.AddComponent<BoxCollider>();
         BoxCollider bc = ob.GetComponent<BoxCollider>();
         bc.bounds = prefabInstance.GetComponent<BoxCollider>().bounds;*/
@@ -70,11 +65,16 @@ public class Window : MonoBehaviour
 
 
     }
+
+    /// <summary>
+    /// Mengembalikan koordinat 3D jendela, menambahkan offset Y untuk ketinggian lantai.
+    /// </summary>
     public Vector3 getCoordinates()
     {
         float xCenter = x1 + (Mathf.Abs(x2 - x1) / 2);
         float yCenter = y1 + (Mathf.Abs(y2 - y1) / 2);
-        return new Vector3(yCenter * Builder.yScale, 0, xCenter * Builder.xScale);
+        // Tinggi jendela standar (misalnya 0, di lantai) + Offset Lantai
+        return new Vector3(yCenter * Builder.yScale, 0f + floorYOffset, xCenter * Builder.xScale);
     }
     public Vector3 getScale()
     {
@@ -96,23 +96,21 @@ public class Window : MonoBehaviour
             Vector3 newScale = new Vector3(scale * Builder.xScale, 1, 1);
             return newScale;
         }
-
-
-
     }
-    public void setPoints(float x1, float y1, float x2, float y2)
 
+    /// <summary>
+    /// Mengatur batas-batas Bounding Box dan Offset Lantai.
+    /// </summary>
+    // KUNCI PERBAIKAN: Menambahkan parameter ke-5 (yOffset)
+    public void setPoints(float x1, float y1, float x2, float y2, float yOffset)
     {
-
-
         this.x1 = x1;
         this.x2 = x2;
         this.y1 = y1;
         this.y2 = y2;
-
-
-
+        this.floorYOffset = yOffset; // Simpan offset lantai
     }
+
     private char getRotation()
     {
         float xDiff = Mathf.Abs(x1 - x2);
@@ -137,6 +135,4 @@ public class Window : MonoBehaviour
             default: return Quaternion.identity;
         }
     }
-    // Update is called once per frame
-   
 }

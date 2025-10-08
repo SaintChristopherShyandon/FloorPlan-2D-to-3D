@@ -5,35 +5,48 @@ using UnityEngine;
 public class WallMesh : MonoBehaviour
 {
     // Start is called before the first frame update
-   
-   
-   
-   
+    
+    
+    
+    
     Vector3[] meshDataVertices;
     public float x1,y1,x2,y2;
+    // Variabel baru untuk menyimpan offset vertikal lantai
+    private float floorYOffset = 0f; 
+    
     GameObject ob;
     public char rotation;
     public bool isFiller = false;
     Bounds meshBounds;
-     int wallPaperIds=0;
+    int wallPaperIds=0;
     Vector3 scale;
-    public void setGameObjectReference(GameObject obj)
 
+    public void setGameObjectReference(GameObject obj)
     {
         ob = obj;
     }
 
-    public void  setPoints(float x1,float y1,float x2,float y2)
+    // PERBAIKAN 1: Menambahkan 5 argumen overload untuk setPoints
+    public void setPoints(float x1, float y1, float x2, float y2, float yOffset)
     {
-
         this.x1 = x1;
         this.x2 = x2;
         this.y1 = y1;
         this.y2 = y2;
-       
-
+        this.floorYOffset = yOffset; // Simpan offset lantai
     }
-   
+
+    // setPoints versi lama (4 argumen) dipertahankan, meskipun tidak digunakan lagi
+    public void setPoints(float x1,float y1,float x2,float y2)
+    {
+        this.x1 = x1;
+        this.x2 = x2;
+        this.y1 = y1;
+        this.y2 = y2;
+        // Jika dipanggil dengan 4 argumen, offset adalah 0 (lantai dasar)
+        this.floorYOffset = 0f; 
+    }
+    
     void Start()
     {
         
@@ -47,15 +60,15 @@ public class WallMesh : MonoBehaviour
         Quaternion angle = getAngle(rotation);
 
 
-       meshBounds = cube.GetComponent<MeshFilter>().mesh.bounds;
+        meshBounds = cube.GetComponent<MeshFilter>().mesh.bounds;
         scale = getScale();
         cube.transform.localScale = scale;
         
         cube.transform.rotation = angle;
 
-       
+        
         cube.transform.parent = gameObject.transform;
-        transform.position = coordinates;
+        transform.position = coordinates; // Posisi sekarang menyertakan floorYOffset
         if (!isFiller) {
             cube.GetComponent<BoxCollider>().isTrigger = true;
             cube.AddComponent<BoxCollider>();
@@ -68,29 +81,29 @@ public class WallMesh : MonoBehaviour
 
         cube.AddComponent<Rigidbody>().isKinematic = true;
         addWallPaperPoints(cube);
-      
-       
-        
     }
+    
     private void wallPaperPoints(float x,float z,string name)
     {
         Vector3 colliderSize = new Vector3(0.1f, 0.1f, 0.1f);
         GameObject go = new GameObject(name);
         go.tag = "wallPaperr";
-        go.transform.position = new Vector3(x, 1.25f, z);
+        // PERBAIKAN 3: Menambahkan floorYOffset ke koordinat Y
+        go.transform.position = new Vector3(x, 1.25f + floorYOffset, z); 
         go.AddComponent<Rigidbody>().isKinematic = true;
         BoxCollider goCollider = go.AddComponent<BoxCollider>();
         goCollider.isTrigger = true;
         go.transform.localScale = colliderSize;
         go.transform.parent = transform;
-       WallPaper wp= go.AddComponent<WallPaper>();
+        WallPaper wp= go.AddComponent<WallPaper>();
         wp.addId(this.wallPaperIds);
         this.wallPaperIds++;
 
     }
+
     public void addWallPaperPoints(GameObject cube)
     {
-
+        // ... (Logika yang sama) ...
         float length = cube.transform.localScale.x;
         length = length * 100;
         int lengthInCm = (int)length;
@@ -134,10 +147,8 @@ public class WallMesh : MonoBehaviour
             wallPaperPoints((startPoint + ((i - 1) * intervalInCm)) + remainingPoint, x1 * Builder.xScale - 0.1f, "wallpaper_front");
             wallPaperPoints((startPoint + ((i - 1) * intervalInCm)) + remainingPoint, x2 * Builder.xScale +0.1f, "wallpaper_back");
         }
-     
-
     }
-  
+ 
     private Quaternion getAngle(char c)
     {
         switch (c)
@@ -173,7 +184,7 @@ public class WallMesh : MonoBehaviour
 
         if (rotation == 'v')
         {
-           
+            
             Vector3 newScale = new Vector3(scaleY * Builder.yScale, 2.5f, scaleX*Builder.xScale);
             return newScale;
         }
@@ -181,21 +192,17 @@ public class WallMesh : MonoBehaviour
 
         else
         {
-           
+            
             Vector3 newScale = new Vector3(scaleX * Builder.xScale, 2.5f, scaleY*Builder.yScale);
             return newScale;
         }
     }
+    // PERBAIKAN 2: Menambahkan floorYOffset ke koordinat Y
     public Vector3 getCoordinates()
     {
         float xCenter = x1 + (Mathf.Abs(x2 - x1) / 2);
         float yCenter = y1 + (Mathf.Abs(y2 - y1) / 2);
-        return new Vector3(yCenter * Builder.yScale, 1.25f, xCenter * Builder.xScale);
+        // Menambahkan floorYOffset ke posisi Y (1.25f)
+        return new Vector3(yCenter * Builder.yScale, 1.25f + floorYOffset, xCenter * Builder.xScale);
     }
- 
-
-   
-    
-    // Update is called once per frame
-
 }

@@ -4,180 +4,217 @@ using UnityEngine;
 using System.IO;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
+
 public class Builder : MonoBehaviour
 {
-    // Start is called before the first frame update
+    // Konstanta Skala dan Tinggi Lantai
+    // Ketinggian dalam unit Unity untuk setiap lantai (misalnya 4 meter)
+    private const float FLOOR_HEIGHT = 4.0f; 
     
+    // Data statis
     public static float xScale;
     public static float yScale;
     public static float originalScale;
-    public static bool scaleSet;
     public static string data;
-    public static Point[] points;
-    public static NamesSub[] classes;
+    
+    // Variabel Instansiasi
+    public GameObject spwaner; // (Tidak digunakan dalam kode yang dimodifikasi, tetapi dipertahankan)
 
-    public GameObject spwaner;
-
-    [System.Serializable]
- 
-    public class Points
-    {
-       public  Point[] points;
-    }
-    [System.Serializable]
-    public class xDimension
-    {
-        public int Width;
-    }[System.Serializable]
-    public class DoorAverage
-    {
-        public float averageDoor;
-    }
-    [System.Serializable]
-    public class yDimension
-    {
-        public int Height;
-    }
+    // =========================================================================
+    // JSON DESERIALIZATION CLASSES (BARU UNTUK MULTI-LANTAI)
+    // =========================================================================
+    
     [System.Serializable]
     public class Point
     {
-        public double x1;
-        public double y1;
-        public double x2;
-        public double y2;
-
+        public double x1; // xmin
+        public double y1; // ymin
+        public double x2; // xmax
+        public double y2; // ymax
     }
-    [System.Serializable]
-    public class Names
-    {
-        public NamesSub[] classes; 
-    }
+    
     [System.Serializable]
     public class NamesSub
     {
-        public string name;
+        public string name; // wall, window, or door
     }
- 
 
-    private Point[] localReaderPoints()
+    [System.Serializable]
+    // Kelas untuk data satu lantai (sama dengan struktur respons API tunggal)
+    public class FloorData
     {
-       
-        
-        Points x = JsonUtility.FromJson<Points>(data);
-        return x.points;
-
-
+        public int floor_index;
+        public Point[] points;
+        public NamesSub[] classes;
+        public int Width;
+        public int Height;
+        public float averageDoor;
     }
-    private NamesSub[] localReaderNames()
+    
+    [System.Serializable]
+    // Kelas Pembungkus Root (Sesuai dengan {"images": [...]})
+    public class FloorDataArray
     {
-        
-        Names x = JsonUtility.FromJson<Names>(data);
-        return x.classes;
+        public FloorData[] images;
     }
-    private void localReaderScale()
+
+    // =========================================================================
+    // READER DAN AWAKE
+    // =========================================================================
+    
+    private FloorDataArray floorDataArray;
+
+    private void localReaderData()
     {
+        if (string.IsNullOrEmpty(data))
+        {
+            Debug.LogError("Data JSON kosong. Unggah gambar terlebih dahulu.");
+            return;
+        }
 
-        
-        DoorAverage da= JsonUtility.FromJson<DoorAverage>(data);
+        try
+        {
+            // Deserialize JSON ke struktur array multi-lantai
+            floorDataArray = JsonUtility.FromJson<FloorDataArray>(data);
+            if (floorDataArray == null || floorDataArray.images == null)
+            {
+                throw new System.Exception("JSON parsing failed or 'images' array is missing.");
+            }
+            Debug.Log($"Successfully parsed {floorDataArray.images.Length} floors from JSON.");
+            
+            // Tentukan skala global berdasarkan rata-rata semua pintu
+            float totalAvgDoor = 0f;
+            int totalFloors = floorDataArray.images.Length;
 
-       
-       // xScale = scale + x4K / (float)x.Width;
-        //yScale = scale + y4K / (float)y.Height;
-        xScale = 1/da.averageDoor;
-       yScale = 1/da.averageDoor;
-        originalScale = 1 / da.averageDoor;
+            foreach(var floor in floorDataArray.images)
+            {
+                totalAvgDoor += floor.averageDoor;
+            }
 
-    }
+            float combinedAvgDoor = (totalFloors > 0) ? totalAvgDoor / totalFloors : 0f;
+            
+            // Set skala global
+            xScale = (combinedAvgDoor > 0) ? 1.0f / combinedAvgDoor : 0.01f;
+            yScale = xScale; // Skala X dan Y harus sama
+            originalScale = xScale;
+            
+            Debug.Log($"Skala Global (1/AvgDoor): {originalScale}");
 
-    void Start() {
-        FindObjectOfType<PathFinderNavMesh>()?.FindUsingMarkers();
+
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("Error parsing JSON data: " + e.Message);
+        }
     }
 
     private void Awake()
     {
-
         data = Analyze.data;
-        //StreamReader reader = new StreamReader("D:/Mask_RCNN/unity/unityData.json");
-        // data = reader.ReadToEnd();
-        // reader.Close();
-        points = localReaderPoints();
-        classes = localReaderNames();
-        localReaderScale();
-        createObjects();
+        localReaderData();
+        
+        if (floorDataArray != null && floorDataArray.images != null)
+        {
+            createBuilding();
+        }
+        else
+        {
+            Debug.LogError("Gagal memuat data lantai. Tidak dapat membangun gedung.");
+        }
 
+        // Pastikan NavMesh dibake setelah semua objek dibuat
         FindObjectOfType<PathFinderNavMesh>()?.BakeNavMesh();
     }
+    
+    // =========================================================================
+    // PEMBANGUNAN GEDUNG MULTI-LANTAI
+    // =========================================================================
 
-  
-    private void createObjects()
+    private void createBuilding()
     {
-        int count = -1;
-        foreach (Point point in points)
+        // Iterasi melalui setiap data lantai yang diterima dari API
+        foreach (FloorData floor in floorDataArray.images)
         {
+            // Hitung offset vertikal untuk lantai ini
+            // Floor 0: 0 * HEIGHT
+            // Floor 1: 1 * HEIGHT
+            // Floor 2: 2 * HEIGHT, dst.
+            float yOffset = floor.floor_index * FLOOR_HEIGHT; 
             
-            count++;
-            if (classes[count].name != "wall")
-            {
-                continue;
-            }
-            GameObject gameObj = new GameObject(classes[count].name);
-           
-            componentsAdder(gameObj, point, classes[count].name);
+            Debug.Log($"Mulai membangun Lantai ke-{floor.floor_index} dengan offset Y: {yOffset}");
 
-        }
-        count = -1;
-       
-        foreach (Point point in points)
-        {
-            count++;
-            if (classes[count].name == "wall")
-            {
-                continue;
-            }
-            GameObject gameObj = new GameObject(classes[count].name);
-            componentsAdder(gameObj, point, classes[count].name);
+            // 1. Buat kontainer untuk lantai agar mudah diatur di Hierarchy
+            GameObject floorContainer = new GameObject($"Floor_{floor.floor_index}_Y{yOffset}");
             
-
+            // 2. Buat Dinding terlebih dahulu
+            for (int i = 0; i < floor.points.Length; i++)
+            {
+                if (floor.classes[i].name == "wall")
+                {
+                    createObjectForFloor(floor.points[i], floor.classes[i].name, floorContainer.transform, yOffset);
+                }
+            }
+            
+            // 3. Buat Pintu dan Jendela
+            for (int i = 0; i < floor.points.Length; i++)
+            {
+                string className = floor.classes[i].name;
+                if (className != "wall")
+                {
+                    createObjectForFloor(floor.points[i], className, floorContainer.transform, yOffset);
+                }
+            }
         }
-
     }
 
-    void componentsAdder(GameObject obj,Point p,string className)
+    private void createObjectForFloor(Point p, string className, Transform parent, float yOffset)
+    {
+        GameObject gameObj = new GameObject(className);
+        gameObj.transform.SetParent(parent); // Set parent ke kontainer lantai
+        
+        // Panggil komponen adder dengan offset Y
+        componentsAdder(gameObj, p, className, yOffset);
+    }
+    
+    void componentsAdder(GameObject obj, Point p, string className, float yOffset)
     {
         obj.AddComponent<MeshFilter>();
         obj.AddComponent<MeshRenderer>();
+        
+        // Offset Y diaplikasikan di script WallMesh, Door, dan Window Anda
+        // Kita perlu memodifikasi script WallMesh/Door/Window agar dapat menerima yOffset
+        // ASUMSI: Script WallMesh, Door, dan Window memiliki fungsi setPoints baru:
+        // setPoints(float x1, float y1, float x2, float y2, float yOffset)
         
         if (className.Equals("wall"))
         {
             obj.tag = "wall";
             obj.AddComponent<WallMesh>();
-
             WallMesh temp = obj.GetComponent<WallMesh>();
-            temp.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2);
+            // PENTING: WallMesh harus diubah untuk menerima yOffset dan menggunakannya!
+            // Kita panggil fungsi dengan 5 parameter
+            temp.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2, yOffset); 
             temp.setGameObjectReference(obj);
         }
-        if (className.Equals("door"))
+        else if (className.Equals("door"))
         {
             obj.tag = "door";
             obj.AddComponent<Door>();
             Door temp = obj.GetComponent<Door>();
-           
-            temp.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2);
+            // PENTING: Door harus diubah untuk menerima yOffset
+            temp.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2, yOffset);
             temp.setGameObjectReference(obj);
-            
         }
-        if (className.Equals("window"))
+        else if (className.Equals("window"))
         {
             obj.tag = "window";
             obj.AddComponent<Window>();
             Window temp = obj.GetComponent<Window>();
-
-            temp.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2);
+            // PENTING: Window harus diubah untuk menerima yOffset
+            temp.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2, yOffset);
             temp.setGameObjectReference(obj);
-
         }
-        
-
     }
-
+    
+    // Fungsi Start() lama (FindObjectOfType<PathFinderNavMesh>()?.FindUsingMarkers();) dihapus karena BakeNavMesh() dilakukan di Awake().
 }
