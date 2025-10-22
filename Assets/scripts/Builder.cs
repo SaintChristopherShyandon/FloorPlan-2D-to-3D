@@ -6,7 +6,7 @@ using UnityEngine.SceneManagement;
 public class Builder : MonoBehaviour
 {
     // Tinggi per lantai dalam unit Unity (misalnya 4 meter)
-    private const float FLOOR_HEIGHT = 4.0f;
+    private const float FLOOR_HEIGHT = 2.5f;
 
     // Data statis global
     public static float xScale;
@@ -140,6 +140,8 @@ public class Builder : MonoBehaviour
 
             // Buat kontainer untuk setiap lantai agar rapi di Hierarchy
             GameObject floorContainer = new GameObject($"Floor_{floor.floor_index}_Y{yOffset}");
+            floorContainer.tag = "FloorContainer";
+            CreateFloorPlane(floor, floorContainer.transform, yOffset);
 
             // Tambahkan dinding lebih dahulu
             for (int i = 0; i < floor.points.Length; i++)
@@ -158,6 +160,10 @@ public class Builder : MonoBehaviour
                 {
                     CreateObjectForFloor(floor.points[i], className, floorContainer.transform, yOffset);
                 }
+            }
+            if (PathfindingGrid.Instance != null)
+            {
+                PathfindingGrid.Instance.GenerateGrid();
             }
         }
     }
@@ -201,6 +207,61 @@ public class Builder : MonoBehaviour
             default:
                 Debug.LogWarning($"[Builder] Class tidak dikenal: {className}");
                 break;
+        }
+    }
+
+    // =======================================================================
+    //  PEMBUATAN LANTAI (FLOOR PLANE)
+    // =======================================================================
+
+    private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffset)
+    {
+        // 1. Cari batas terluar dari semua titik di lantai ini
+        float minX = float.MaxValue;
+        float maxX = float.MinValue;
+        float minZ = float.MaxValue; // Di Unity, X dari gambar adalah Z
+        float maxZ = float.MinValue; // Di Unity, Y dari gambar adalah X
+
+        foreach (var p in floorData.points)
+        {
+            // Perbarui batas berdasarkan koordinat setiap objek (dinding, pintu, dll.)
+            minZ = Mathf.Min(minZ, (float)p.x1, (float)p.x2);
+            maxZ = Mathf.Max(maxZ, (float)p.x1, (float)p.x2);
+            minX = Mathf.Min(minX, (float)p.y1, (float)p.y2);
+            maxX = Mathf.Max(maxX, (float)p.y1, (float)p.y2);
+        }
+
+        // Jika tidak ada titik sama sekali, jangan buat lantai
+        if (minX == float.MaxValue) return;
+
+        // 2. Terapkan skala global
+        minX *= yScale;
+        maxX *= yScale;
+        minZ *= xScale;
+        maxZ *= xScale;
+
+        // 3. Hitung pusat dan ukuran lantai
+        float centerX = (minX + maxX) / 2f;
+        float centerZ = (minZ + maxZ) / 2f;
+        float sizeX = maxX - minX;
+        float sizeZ = maxZ - minZ;
+        float thickness = 0.1f; // Ketebalan lantai
+
+        // 4. Buat objek lantai (menggunakan Cube tipis)
+        GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        floorPlane.name = "FloorSurface";
+        floorPlane.transform.SetParent(parent, false);
+
+        // 5. Atur posisi dan skala
+        // Posisi Y diatur agar permukaan atas lantai pas di yOffset
+        floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
+        floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+
+        // Opsional: Beri warna default agar terlihat jelas
+        var renderer = floorPlane.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            renderer.material.color = Color.grey;
         }
     }
 }
