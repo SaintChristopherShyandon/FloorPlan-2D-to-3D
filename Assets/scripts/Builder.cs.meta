@@ -3,7 +3,10 @@ guid: 7483f9bce3d996943a2ffb76eb3379b1
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - spwaner: {instanceID: 0}
+  - pointPrefab: {fileID: 1770939625428806507, guid: 7dd3ff52ab4857c48b0f1850789f3fef,
+      type: 3}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

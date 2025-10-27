@@ -4,21 +4,15 @@ using UnityEngine;
 
 public class WallMesh : MonoBehaviour
 {
-    // Start is called before the first frame update
-    
-    
-    
-    
     Vector3[] meshDataVertices;
-    public float x1,y1,x2,y2;
-    // Variabel baru untuk menyimpan offset vertikal lantai
-    private float floorYOffset = 0f; 
-    
+    public float x1, y1, x2, y2;
+    private float floorYOffset = 0f;
+
     GameObject ob;
     public char rotation;
     public bool isFiller = false;
     Bounds meshBounds;
-    int wallPaperIds=0;
+    int wallPaperIds = 0;
     Vector3 scale;
 
     public void setGameObjectReference(GameObject obj)
@@ -26,153 +20,128 @@ public class WallMesh : MonoBehaviour
         ob = obj;
     }
 
-    // PERBAIKAN 1: Menambahkan 5 argumen overload untuk setPoints
     public void setPoints(float x1, float y1, float x2, float y2, float yOffset)
     {
         this.x1 = x1;
         this.x2 = x2;
         this.y1 = y1;
         this.y2 = y2;
-        this.floorYOffset = yOffset; // Simpan offset lantai
+        this.floorYOffset = yOffset;
     }
 
-    // setPoints versi lama (4 argumen) dipertahankan, meskipun tidak digunakan lagi
-    public void setPoints(float x1,float y1,float x2,float y2)
+    public void setPoints(float x1, float y1, float x2, float y2)
     {
         this.x1 = x1;
         this.x2 = x2;
         this.y1 = y1;
         this.y2 = y2;
-        // Jika dipanggil dengan 4 argumen, offset adalah 0 (lantai dasar)
-        this.floorYOffset = 0f; 
+        this.floorYOffset = 0f;
     }
-    
+
     void Start()
     {
-        
         GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube.layer = 9;
-        cube.name = "wall1";
-        cube.transform.position = new Vector3(0, 0, 0);
+        cube.name = "wall";
+        cube.transform.position = Vector3.zero;
+
         Vector3 coordinates = getCoordinates();
         rotation = getRotation();
-
         Quaternion angle = getAngle(rotation);
-
 
         meshBounds = cube.GetComponent<MeshFilter>().mesh.bounds;
         scale = getScale();
         cube.transform.localScale = scale;
-        
         cube.transform.rotation = angle;
-
-        
         cube.transform.parent = gameObject.transform;
-        transform.position = coordinates; // Posisi sekarang menyertakan floorYOffset
-        if (!isFiller) {
-            cube.GetComponent<BoxCollider>().isTrigger = true;
-            cube.AddComponent<BoxCollider>();
-            cube.name = "wall";
-        }
-        else
-        {
-            cube.AddComponent<BoxCollider>().isTrigger=true;
-        }
+        transform.position = coordinates;
+
+        // collider utama (trigger)
+        BoxCollider mainCollider = cube.GetComponent<BoxCollider>();
+        mainCollider.isTrigger = true;
 
         cube.AddComponent<Rigidbody>().isKinematic = true;
+
+        // spawn titik kecil di permukaan
         addWallPaperPoints(cube);
     }
-    
-    private void wallPaperPoints(float x,float z,string name)
+
+    private void wallPaperPoints(Vector3 pos, string name)
     {
-        Vector3 colliderSize = new Vector3(0.1f, 0.1f, 0.1f);
         GameObject go = new GameObject(name);
         go.tag = "wallPaperr";
-        // PERBAIKAN 3: Menambahkan floorYOffset ke koordinat Y
-        go.transform.position = new Vector3(x, 1.25f + floorYOffset, z); 
-        go.AddComponent<Rigidbody>().isKinematic = true;
+        go.transform.position = pos;
+        go.transform.parent = transform;
+
+        // collider kecil biar bisa diklik nanti
         BoxCollider goCollider = go.AddComponent<BoxCollider>();
         goCollider.isTrigger = true;
-        go.transform.localScale = colliderSize;
-        go.transform.parent = transform;
-        WallPaper wp= go.AddComponent<WallPaper>();
+        goCollider.size = new Vector3(0.1f, 0.1f, 0.1f);
+
+        Rigidbody rb = go.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
+
+        WallPaper wp = go.AddComponent<WallPaper>();
         wp.addId(this.wallPaperIds);
         this.wallPaperIds++;
-
     }
 
     public void addWallPaperPoints(GameObject cube)
     {
-        // ... (Logika yang sama) ...
-        float length = cube.transform.localScale.x;
-        length = length * 100;
-        int lengthInCm = (int)length;
-        //print(lengthInCm);
-        
-        float startPoint ;
-        //float midPoint;
-        if (rotation == 'h')
+        Vector3 wallScale = cube.transform.localScale;
+        Vector3 wallCenter = cube.transform.position;
+        Quaternion wallRotation = cube.transform.rotation;
+
+        float spacing = 0.25f;
+        // ***** PERUBAHAN INTI DI SINI *****
+        // gunakan lebar selalu dari local X (local space) — kemudian tempatkan titik pada local Z = +halfZ
+        float width = wallScale.x;   // gunakan local X sebagai lebar grid (nanti TransformPoint meng-handle rotasi)
+        float height = wallScale.y;
+
+        int numX = Mathf.CeilToInt(width / spacing);
+        int numY = Mathf.CeilToInt(height / spacing);
+
+        // local half depth (permukaan depan di local +Z)
+        float localHalfZ = wallScale.z / 2f;
+
+        for (int i = 0; i <= numX; i++)
         {
-            startPoint = x1 * Builder.xScale;
-        }
-        else
-        {
-            startPoint = y1 * Builder.xScale;
-        }
-        int interval = 15;
-        int numOfPoints = lengthInCm / interval;
-        float remainingPoint = (lengthInCm % interval)/100f;
-        float intervalInCm = interval / 100f;
-        print(remainingPoint);
-        int i;
-        for ( i = 0; i <= numOfPoints; i++)
-        {
-            if(rotation=='h'){
-                wallPaperPoints(y1 * Builder.yScale-0.1f, startPoint + (i * intervalInCm), "wallpaper_front");
-                wallPaperPoints(y2 * Builder.yScale+0.1f,  startPoint + (i * intervalInCm), "wallpaper_back");
-            }
-            else
+            for (int j = 0; j <= numY; j++)
             {
-                wallPaperPoints(startPoint + (i * intervalInCm), x1 * Builder.xScale-0.1f, "wallpaper_front");
-                wallPaperPoints(startPoint + (i * intervalInCm), x2 * Builder.xScale+0.1f, "wallpaper_back");
+                float offsetX = -width / 2 + i * spacing;
+                float offsetY = -height / 2 + j * spacing;
+
+                // Buat posisi di local space cube: (localX, localY, localZ)
+                // localZ kita pakai localHalfZ agar titik menempel ke permukaan depan local (+Z).
+                Vector3 localPos = new Vector3(offsetX, offsetY, localHalfZ);
+
+                // Convert ke world pos (mengikuti cube.transform.rotation)
+                Vector3 worldPos = wallRotation * localPos + wallCenter;
+
+                wallPaperPoints(worldPos, "wallpaper_point");
             }
-        }
-        if (rotation == 'h')
-        {
-            wallPaperPoints(y1 * Builder.yScale - 0.1f,  (startPoint + ((i - 1) * intervalInCm)) + remainingPoint, "wallpaper_front");
-            wallPaperPoints(y2 * Builder.yScale + 0.1f, (startPoint + ((i - 1) * intervalInCm)) + remainingPoint, "wallpaper_back");
-        }
-        else
-        {
-            wallPaperPoints((startPoint + ((i - 1) * intervalInCm)) + remainingPoint, x1 * Builder.xScale - 0.1f, "wallpaper_front");
-            wallPaperPoints((startPoint + ((i - 1) * intervalInCm)) + remainingPoint, x2 * Builder.xScale +0.1f, "wallpaper_back");
         }
     }
- 
+
     private Quaternion getAngle(char c)
     {
         switch (c)
         {
-            case 'v': return Quaternion.identity;
-
-            case 'h': return Quaternion.Euler(0, 90, 0);
+            case 'v': return Quaternion.identity; // menghadap ke Z
+            case 'h': return Quaternion.Euler(0, 90, 0); // menghadap ke X
             default: return Quaternion.identity;
         }
     }
+
     private char getRotation()
     {
         float xDiff = Mathf.Abs(x1 - x2);
         float yDiff = Mathf.Abs(y1 - y2);
-        if (xDiff > yDiff)
-        {
-            return 'h';
-        }
-        if (yDiff > xDiff)
-        {
-            return 'v';
-        }
+        if (xDiff > yDiff) return 'h';
+        if (yDiff > xDiff) return 'v';
         return 'n';
     }
+
     public Vector3 getScale()
     {
         float yDiff = Mathf.Abs(y1 - y2);
@@ -183,26 +152,15 @@ public class WallMesh : MonoBehaviour
         float scaleX = xDiff / meshBoundX;
 
         if (rotation == 'v')
-        {
-            
-            Vector3 newScale = new Vector3(scaleY * Builder.yScale, 2.5f, scaleX*Builder.xScale);
-            return newScale;
-        }
-        // here where you can handle diagonal doors in the future
-
+            return new Vector3(scaleY * Builder.yScale, 2.5f, scaleX * Builder.xScale);
         else
-        {
-            
-            Vector3 newScale = new Vector3(scaleX * Builder.xScale, 2.5f, scaleY*Builder.yScale);
-            return newScale;
-        }
+            return new Vector3(scaleX * Builder.xScale, 2.5f, scaleY * Builder.yScale);
     }
-    // PERBAIKAN 2: Menambahkan floorYOffset ke koordinat Y
+
     public Vector3 getCoordinates()
     {
         float xCenter = x1 + (Mathf.Abs(x2 - x1) / 2);
         float yCenter = y1 + (Mathf.Abs(y2 - y1) / 2);
-        // Menambahkan floorYOffset ke posisi Y (1.25f)
         return new Vector3(yCenter * Builder.yScale, 1.25f + floorYOffset, xCenter * Builder.xScale);
     }
 }

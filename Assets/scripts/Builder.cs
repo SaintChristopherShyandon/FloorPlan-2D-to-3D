@@ -139,7 +139,7 @@ public class Builder : MonoBehaviour
             Debug.Log($"[Builder] Membangun lantai {floor.floor_index} pada Y offset {yOffset}");
 
             // Buat kontainer untuk setiap lantai agar rapi di Hierarchy
-            GameObject floorContainer = new GameObject($"Floor_{floor.floor_index}_Y{yOffset}");
+            GameObject floorContainer = new GameObject($"Floor_{floor.floor_index}");
             floorContainer.tag = "FloorContainer";
             CreateFloorPlane(floor, floorContainer.transform, yOffset);
 
