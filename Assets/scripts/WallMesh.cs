@@ -69,7 +69,7 @@ public class WallMesh : MonoBehaviour
     private void wallPaperPoints(Vector3 pos, string name)
     {
         GameObject go = new GameObject(name);
-        go.tag = "wallPaperr";
+        go.tag = "point";
         go.transform.position = pos;
         go.transform.parent = transform;
 
@@ -93,32 +93,35 @@ public class WallMesh : MonoBehaviour
         Quaternion wallRotation = cube.transform.rotation;
 
         float spacing = 0.25f;
-        // ***** PERUBAHAN INTI DI SINI *****
-        // gunakan lebar selalu dari local X (local space) — kemudian tempatkan titik pada local Z = +halfZ
-        float width = wallScale.x;   // gunakan local X sebagai lebar grid (nanti TransformPoint meng-handle rotasi)
+        float width = wallScale.x;
         float height = wallScale.y;
 
-        int numX = Mathf.CeilToInt(width / spacing);
-        int numY = Mathf.CeilToInt(height / spacing);
+        // Kurangi satu supaya titik terakhir tidak keluar dari batas
+        int numX = Mathf.Max(1, Mathf.FloorToInt(width / spacing));
+        int numY = Mathf.Max(1, Mathf.FloorToInt(height / spacing));
 
-        // local half depth (permukaan depan di local +Z)
         float localHalfZ = wallScale.z / 2f;
 
-        for (int i = 0; i <= numX; i++)
+        // spawn di dua sisi (depan dan belakang)
+        float[] sides = { localHalfZ, -localHalfZ };
+
+        foreach (float sideZ in sides)
         {
-            for (int j = 0; j <= numY; j++)
+            for (int i = 0; i <= numX; i++)
             {
-                float offsetX = -width / 2 + i * spacing;
-                float offsetY = -height / 2 + j * spacing;
+                for (int j = 0; j <= numY; j++)
+                {
+                    float offsetX = -width / 2 + (i * spacing);
+                    float offsetY = -height / 2 + (j * spacing);
 
-                // Buat posisi di local space cube: (localX, localY, localZ)
-                // localZ kita pakai localHalfZ agar titik menempel ke permukaan depan local (+Z).
-                Vector3 localPos = new Vector3(offsetX, offsetY, localHalfZ);
+                    // posisi di local space
+                    Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
 
-                // Convert ke world pos (mengikuti cube.transform.rotation)
-                Vector3 worldPos = wallRotation * localPos + wallCenter;
+                    // convert ke world space
+                    Vector3 worldPos = wallRotation * localPos + wallCenter;
 
-                wallPaperPoints(worldPos, "wallpaper_point");
+                    wallPaperPoints(worldPos, "wall_point");
+                }
             }
         }
     }

@@ -214,54 +214,100 @@ public class Builder : MonoBehaviour
     //  PEMBUATAN LANTAI (FLOOR PLANE)
     // =======================================================================
 
-    private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffset)
+private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffset)
+{
+    // 1. Cari batas terluar dari semua titik di lantai ini
+    float minX = float.MaxValue;
+    float maxX = float.MinValue;
+    float minZ = float.MaxValue;
+    float maxZ = float.MinValue;
+
+    foreach (var p in floorData.points)
     {
-        // 1. Cari batas terluar dari semua titik di lantai ini
-        float minX = float.MaxValue;
-        float maxX = float.MinValue;
-        float minZ = float.MaxValue; // Di Unity, X dari gambar adalah Z
-        float maxZ = float.MinValue; // Di Unity, Y dari gambar adalah X
+        minZ = Mathf.Min(minZ, (float)p.x1, (float)p.x2);
+        maxZ = Mathf.Max(maxZ, (float)p.x1, (float)p.x2);
+        minX = Mathf.Min(minX, (float)p.y1, (float)p.y2);
+        maxX = Mathf.Max(maxX, (float)p.y1, (float)p.y2);
+    }
 
-        foreach (var p in floorData.points)
+    if (minX == float.MaxValue) return;
+
+    // 2. Terapkan skala global
+    minX *= yScale;
+    maxX *= yScale;
+    minZ *= xScale;
+    maxZ *= xScale;
+
+    // 3. Hitung pusat dan ukuran lantai
+    float centerX = (minX + maxX) / 2f;
+    float centerZ = (minZ + maxZ) / 2f;
+    float sizeX = maxX - minX;
+    float sizeZ = maxZ - minZ;
+    float thickness = 0.1f; // Ketebalan lantai
+
+    // 4. Buat objek lantai
+    GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
+    floorPlane.name = "FloorSurface";
+    floorPlane.transform.SetParent(parent, false);
+    floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
+    floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+
+    // 5. Warna lantai
+    var renderer = floorPlane.GetComponent<MeshRenderer>();
+    if (renderer != null)
+    {
+        renderer.material.color = Color.grey;
+    }
+
+    // 6. Tambahkan rigidbody agar bisa diatur
+    var rb = floorPlane.AddComponent<Rigidbody>();
+    rb.isKinematic = true;
+
+    // 7. Spawn point di kedua sisi (atas dan bawah)
+    AddFloorPoints(floorPlane);
+}
+
+private void AddFloorPoints(GameObject floor)
+{
+    Vector3 scale = floor.transform.localScale;
+    Vector3 center = floor.transform.position;
+    Quaternion rot = floor.transform.rotation;
+
+    float spacing = 0.25f;
+    int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
+    int numZ = Mathf.Max(1, Mathf.FloorToInt(scale.z / spacing));
+
+    float localHalfY = scale.y / 2f;
+    float[] sides = { localHalfY, -localHalfY }; // atas dan bawah
+
+    foreach (float sideY in sides)
+    {
+        for (int i = 0; i <= numX; i++)
         {
-            // Perbarui batas berdasarkan koordinat setiap objek (dinding, pintu, dll.)
-            minZ = Mathf.Min(minZ, (float)p.x1, (float)p.x2);
-            maxZ = Mathf.Max(maxZ, (float)p.x1, (float)p.x2);
-            minX = Mathf.Min(minX, (float)p.y1, (float)p.y2);
-            maxX = Mathf.Max(maxX, (float)p.y1, (float)p.y2);
-        }
+            for (int j = 0; j <= numZ; j++)
+            {
+                float offsetX = -scale.x / 2 + i * spacing;
+                float offsetZ = -scale.z / 2 + j * spacing;
 
-        // Jika tidak ada titik sama sekali, jangan buat lantai
-        if (minX == float.MaxValue) return;
+                // posisi di local space (permukaan lantai)
+                Vector3 localPos = new Vector3(offsetX, sideY, offsetZ);
+                Vector3 worldPos = rot * localPos + center;
 
-        // 2. Terapkan skala global
-        minX *= yScale;
-        maxX *= yScale;
-        minZ *= xScale;
-        maxZ *= xScale;
+                // buat titik point
+                GameObject go = new GameObject("floor_point");
+                go.transform.position = worldPos;
+                go.transform.parent = floor.transform;
+                go.tag = "point";
 
-        // 3. Hitung pusat dan ukuran lantai
-        float centerX = (minX + maxX) / 2f;
-        float centerZ = (minZ + maxZ) / 2f;
-        float sizeX = maxX - minX;
-        float sizeZ = maxZ - minZ;
-        float thickness = 0.1f; // Ketebalan lantai
+                // collider kecil biar bisa diklik
+                BoxCollider col = go.AddComponent<BoxCollider>();
+                col.isTrigger = true;
+                col.size = new Vector3(0.1f, 0.1f, 0.1f);
 
-        // 4. Buat objek lantai (menggunakan Cube tipis)
-        GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        floorPlane.name = "FloorSurface";
-        floorPlane.transform.SetParent(parent, false);
-
-        // 5. Atur posisi dan skala
-        // Posisi Y diatur agar permukaan atas lantai pas di yOffset
-        floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
-        floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
-
-        // Opsional: Beri warna default agar terlihat jelas
-        var renderer = floorPlane.GetComponent<MeshRenderer>();
-        if (renderer != null)
-        {
-            renderer.material.color = Color.grey;
+                Rigidbody rb = go.AddComponent<Rigidbody>();
+                rb.isKinematic = true;
+            }
         }
     }
+}
 }

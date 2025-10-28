@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityStandardAssets.Characters.FirstPerson;
+
 public class MenuFunc : MonoBehaviour
 {
    public GameObject p;
@@ -144,7 +145,7 @@ public class MenuFunc : MonoBehaviour
             wallmesh.addWallPaperPoints(child);
             
             
-           
+
         }
         GameObject[] doors= GameObject.FindGameObjectsWithTag("door");
         for (int i = 0; i < doors.Length; i++)
@@ -177,7 +178,6 @@ public class MenuFunc : MonoBehaviour
 
 
 
-
         }
         GameObject[] fillers = GameObject.FindGameObjectsWithTag("wall1");
         for (int i = 0; i < fillers.Length; i++)
@@ -191,13 +191,12 @@ public class MenuFunc : MonoBehaviour
             parent.transform.position = coordinates;
             child.transform.localScale = scale;
             wallmesh.addWallPaperPoints(child);
-
-
-
         }
-       
 
-            okButton.gameObject.SetActive(false);
+        // *** UPDATE FLOOR PLANES AFTER SCALES ***
+        UpdateFloorPlanes();
+
+        okButton.gameObject.SetActive(false);
         retryButton.gameObject.SetActive(false);
         textField.gameObject.SetActive(false);
         lineDrawer.gameObject.SetActive(false);
@@ -278,6 +277,9 @@ public class MenuFunc : MonoBehaviour
             child.transform.localScale = scale;
             wallmesh.addWallPaperPoints(child);
         }
+
+        // *** UPDATE FLOOR PLANES AFTER RESETTING SCALES ***
+        UpdateFloorPlanes();
 
         float x = topCamera.transform.position.x;
         float y = topCamera.transform.position.y;
@@ -449,13 +451,11 @@ public class MenuFunc : MonoBehaviour
         {
             Destroy(paintObjs[i]);
 
-
         }
         GameObject[] furniture = GameObject.FindGameObjectsWithTag("furniture");
         for (int i = 0; i < furniture.Length; i++)
         {
             Destroy(furniture[i]);
-
 
         }
         scaleButton.onClick.Invoke();
@@ -482,17 +482,119 @@ public class MenuFunc : MonoBehaviour
         {
             Destroy(paintObjs[i]);
 
-
         }
         GameObject[] furniture = GameObject.FindGameObjectsWithTag("furniture");
         for (int i = 0; i < furniture.Length; i++)
         {
             Destroy(furniture[i]);
 
-
         }
         
         reset.onClick.Invoke();
         
+    }
+
+    // ----------------------- NEW: UpdateFloorPlanes -----------------------
+    // This will resize/reposition FloorSurface children under Floor_<index> containers
+    // to match current positions/scale of walls/windows/doors after Builder.xScale / yScale changes.
+    private void UpdateFloorPlanes()
+    {
+        // same as Builder.FLOOR_HEIGHT
+        const float FLOOR_HEIGHT = 2.5f;
+        const float thickness = 0.1f;
+
+        // Find all floor containers named "Floor_<index>"
+        GameObject[] allObjects = GameObject.FindObjectsOfType<GameObject>();
+        foreach (GameObject obj in allObjects)
+        {
+            if (obj == null || !obj.name.StartsWith("Floor_")) continue;
+
+            Transform floorContainer = obj.transform;
+            // try parse index
+            int floorIndex = 0;
+            string[] parts = obj.name.Split('_');
+            if (parts.Length >= 2)
+            {
+                int.TryParse(parts[1], out floorIndex);
+            }
+
+            // compute bounds from children (only consider children that are part of the floor: walls, doors, windows)
+            bool foundAny = false;
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minZ = float.MaxValue;
+            float maxZ = float.MinValue;
+
+            foreach (Transform child in floorContainer)
+            {
+                // skip existing FloorSurface if present (we will update it later)
+                if (child.name == "FloorSurface") continue;
+
+                // consider renderers first
+                Renderer r = child.GetComponentInChildren<Renderer>();
+                if (r != null)
+                {
+                    Bounds b = r.bounds; // world bounds
+                    minX = Mathf.Min(minX, b.min.x);
+                    maxX = Mathf.Max(maxX, b.max.x);
+                    minZ = Mathf.Min(minZ, b.min.z);
+                    maxZ = Mathf.Max(maxZ, b.max.z);
+                    foundAny = true;
+                }
+                else
+                {
+                    // fallback: use child's position and localScale to estimate
+                    Vector3 cPos = child.position;
+                    Vector3 cScale = child.localScale;
+                    // estimate extents in world by using transform right/forward scaled by localScale axes
+                    Vector3 worldMin = cPos - (child.right * (cScale.x * 0.5f)) - (child.forward * (cScale.z * 0.5f));
+                    Vector3 worldMax = cPos + (child.right * (cScale.x * 0.5f)) + (child.forward * (cScale.z * 0.5f));
+                    minX = Mathf.Min(minX, worldMin.x);
+                    maxX = Mathf.Max(maxX, worldMax.x);
+                    minZ = Mathf.Min(minZ, worldMin.z);
+                    maxZ = Mathf.Max(maxZ, worldMax.z);
+                    foundAny = true;
+                }
+            }
+
+            if (!foundAny)
+            {
+                // nothing to build floor from
+                continue;
+            }
+
+            // Apply current global scales (Builder.xScale / yScale are already set)
+            // But since we are reading world-space bounds, they already reflect new scales.
+            float centerX = (minX + maxX) / 2f;
+            float centerZ = (minZ + maxZ) / 2f;
+            float sizeX = Mathf.Max(0.01f, maxX - minX);
+            float sizeZ = Mathf.Max(0.01f, maxZ - minZ);
+
+            // find existing FloorSurface under this container
+            Transform existing = floorContainer.Find("FloorSurface");
+            GameObject floorPlane;
+            if (existing != null)
+            {
+                floorPlane = existing.gameObject;
+            }
+            else
+            {
+                floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                floorPlane.name = "FloorSurface";
+                floorPlane.transform.SetParent(floorContainer, false);
+            }
+
+            // set position and scale (Y position so top surface sits at yOffset)
+            float yOffset = floorIndex * FLOOR_HEIGHT;
+            floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
+            floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+
+            // visual tweaks
+            var renderer = floorPlane.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.material.color = Color.grey;
+            }
+        }
     }
 }
