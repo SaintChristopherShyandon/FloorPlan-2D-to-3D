@@ -267,47 +267,53 @@ private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffs
     AddFloorPoints(floorPlane);
 }
 
-private void AddFloorPoints(GameObject floor)
-{
-    Vector3 scale = floor.transform.localScale;
-    Vector3 center = floor.transform.position;
-    Quaternion rot = floor.transform.rotation;
-
-    float spacing = 0.25f;
-    int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
-    int numZ = Mathf.Max(1, Mathf.FloorToInt(scale.z / spacing));
-
-    float localHalfY = scale.y / 2f;
-    float[] sides = { localHalfY, -localHalfY }; // atas dan bawah
-
-    foreach (float sideY in sides)
+    private void AddFloorPoints(GameObject floor)
     {
-        for (int i = 0; i <= numX; i++)
+        Vector3 scale = floor.transform.localScale;
+        Vector3 center = floor.transform.position;
+        Quaternion rot = floor.transform.rotation;
+
+        float spacing = 0.25f;
+        int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
+        int numZ = Mathf.Max(1, Mathf.FloorToInt(scale.z / spacing));
+
+        float localHalfY = scale.y / 2f;
+        float[] sides = { localHalfY, -localHalfY }; // atas dan bawah
+
+        foreach (float sideY in sides)
         {
-            for (int j = 0; j <= numZ; j++)
+            for (int i = 0; i <= numX; i++)
             {
-                float offsetX = -scale.x / 2 + i * spacing;
-                float offsetZ = -scale.z / 2 + j * spacing;
+                for (int j = 0; j <= numZ; j++)
+                {
+                    float offsetX = -scale.x / 2 + i * spacing;
+                    float offsetZ = -scale.z / 2 + j * spacing;
 
-                // posisi di local space (permukaan lantai)
-                Vector3 localPos = new Vector3(offsetX, sideY, offsetZ);
-                Vector3 worldPos = rot * localPos + center;
+                    Vector3 localPos = new Vector3(offsetX, sideY, offsetZ);
+                    Vector3 worldPos = rot * localPos + center;
 
-                // buat titik point
-                GameObject go = new GameObject("floor_point");
-                go.transform.position = worldPos;
-                go.transform.parent = floor.transform;
-                go.tag = "point";
+                    GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    go.name = "point";
+                    go.transform.position = worldPos;
+                    go.transform.localScale = Vector3.one * 0.05f;
+                    go.transform.parent = floor.transform;
+                    go.tag = "point";
 
-                // collider kecil biar bisa diklik
-                BoxCollider col = go.AddComponent<BoxCollider>();
-                col.isTrigger = true;
-                col.size = new Vector3(0.1f, 0.1f, 0.1f);
+                    // tambahkan komponen fisik
+                    Collider col = go.GetComponent<Collider>();
+                    col.isTrigger = true;
 
-                Rigidbody rb = go.AddComponent<Rigidbody>();
-                rb.isKinematic = true;
+                    Rigidbody rb = go.AddComponent<Rigidbody>();
+                    rb.isKinematic = true;
+
+                    // tambahkan script PointNode.cs agar bisa dipakai pathfinding
+                    PointNode node = go.AddComponent<PointNode>();
+
+                    // atur warna default (kuning)
+                    var rend = go.GetComponent<Renderer>();
+                    rend.material.color = Color.yellow;
+                }
             }
         }
     }
-}
 }

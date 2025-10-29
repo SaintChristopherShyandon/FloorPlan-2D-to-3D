@@ -7,9 +7,9 @@ using UnityStandardAssets.Characters.FirstPerson;
 
 public class MenuFunc : MonoBehaviour
 {
-   public GameObject p;
-    public  Camera mainCamera;
-    public  Camera topCamera;
+    public GameObject p;
+    public Camera mainCamera;
+    public Camera topCamera;
     public Button okButton;
     public Button retryButton;
     public InputField textField;
@@ -22,60 +22,63 @@ public class MenuFunc : MonoBehaviour
     public Button spawnButton;
     public Camera painterCamera;
     public GameObject player;
-   
+
     public void Quit()
     {
-        print("quitingggg");
         Application.Quit();
     }
+
     public void spawn()
     {
         switchToTopCamera();
     }
-    public  void LoadGame()
+
+    public void LoadGame()
     {
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
     }
+
     public void hamburger()
     {
-       
         p.SetActive(!p.activeSelf);
-       
     }
-    public  void switchToTopCamera()
-    {
 
+    public void switchToTopCamera()
+    {
         mainCamera.enabled = false;
         topCamera.enabled = true;
     }
-    public  void switchToMainCamera()
-    {
 
+    public void switchToMainCamera()
+    {
         mainCamera.enabled = true;
         topCamera.enabled = false;
     }
-    public void  restartLineDrawer()
+
+    public void restartLineDrawer()
     {
-        lineDrawer.GetComponent<LineRenderer>().SetPosition(0, new Vector3(0, 0, 0));
-        lineDrawer.GetComponent<LineRenderer>().SetPosition(1, new Vector3(0, 0, 0));
+        lineDrawer.GetComponent<LineRenderer>().SetPosition(0, Vector3.zero);
+        lineDrawer.GetComponent<LineRenderer>().SetPosition(1, Vector3.zero);
         lineDrawer.GetComponent<LineDrawer>().enabled = true;
-    } 
+    }
+
     public void retry()
     {
         okButton.gameObject.SetActive(false);
         retryButton.gameObject.SetActive(false);
         textField.gameObject.SetActive(false);
-        lineDrawer.GetComponent<LineRenderer>().SetPosition(0,new Vector3(0,0,0));
-        lineDrawer.GetComponent<LineRenderer>().SetPosition(1,new Vector3(0,0,0));
+        lineDrawer.GetComponent<LineRenderer>().SetPosition(0, Vector3.zero);
+        lineDrawer.GetComponent<LineRenderer>().SetPosition(1, Vector3.zero);
         lineDrawer.GetComponent<LineDrawer>().enabled = true;
-        
     }
+
     public void retrySpawner()
     {
         okButtonSpawner.SetActive(false);
         retryButtonSpawner.SetActive(false);
         GameObject.FindGameObjectWithTag("Spawner").GetComponent<Spawner>().postionSelected = false;
     }
+
     public void moveCameraAndPlane()
     {
         float x = topCamera.transform.position.x;
@@ -83,8 +86,8 @@ public class MenuFunc : MonoBehaviour
         float z = topCamera.transform.position.z;
         x = x * (1 / Builder.originalScale) * (Builder.yScale);
         z = z * (1 / Builder.originalScale) * (Builder.xScale);
-
         topCamera.transform.position = new Vector3(x, y, z);
+
         x = plane.transform.position.x;
         y = plane.transform.position.y;
         z = plane.transform.position.z;
@@ -92,10 +95,12 @@ public class MenuFunc : MonoBehaviour
         z = z * (1 / Builder.originalScale) * (Builder.xScale);
         plane.transform.position = new Vector3(x, y, z);
     }
+
     public void settingScale()
     {
         hamburgerbutton.GetComponent<Button>().enabled = false;
     }
+
     public void cancel()
     {
         okButton.gameObject.SetActive(false);
@@ -106,94 +111,53 @@ public class MenuFunc : MonoBehaviour
         retryButtonSpawner.SetActive(false);
         switchToMainCamera();
         moveCameraAndPlane();
-        //Spawner spawnerComponent = GameObject.FindGameObjectWithTag("Spawner").GetComponent<Spawner>();
-        //spawnerComponent.postionSelected = false;
-        //spawnerComponent.gameObject.SetActive(false);
         hamburgerbutton.GetComponent<Button>().enabled = true;
     }
+
     public void ok()
     {
-        print(Builder.xScale);
         float distanceInGame = LineDrawer.getDistance();
         float distanceInReality = float.Parse(textField.text);
-      //  print(distanceInReality);
-       // print(distanceInGame);
-        
         distanceInGame = distanceInGame * (1 / Builder.xScale);
-        print(distanceInGame);
-        Builder.xScale = distanceInReality/distanceInGame;
+        Builder.xScale = distanceInReality / distanceInGame;
         Builder.yScale = distanceInReality / distanceInGame;
-        //delete all wallPaper
-        GameObject[] wallPaperFront = GameObject.FindGameObjectsWithTag("wallPaperr");
-        for(int i = 0; i < wallPaperFront.Length; i++)
-        {
-            Destroy(wallPaperFront[i]);
-        }
-        GameObject[] walls= GameObject.FindGameObjectsWithTag("wall");
-        
 
-        for(int i = 0; i < walls.Length; i++)
+        GameObject[] walls = GameObject.FindGameObjectsWithTag("wall");
+        foreach (GameObject parent in walls)
         {
-            GameObject parent = walls[i];
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             WallMesh wallmesh = parent.GetComponent<WallMesh>();
-            Vector3 scale= wallmesh.getScale();
-            Vector3 coordinates = wallmesh.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-            wallmesh.addWallPaperPoints(child);
-            
-            
-
+            parent.transform.position = wallmesh.getCoordinates();
+            child.transform.localScale = wallmesh.getScale();
         }
-        GameObject[] doors= GameObject.FindGameObjectsWithTag("door");
-        for (int i = 0; i < doors.Length; i++)
-        {
-            GameObject parent = doors[i];
-            
-            GameObject child = parent.transform.GetChild(0).gameObject;
 
+        GameObject[] doors = GameObject.FindGameObjectsWithTag("door");
+        foreach (GameObject parent in doors)
+        {
+            GameObject child = parent.transform.GetChild(0).gameObject;
             Door door = parent.GetComponent<Door>();
-            Vector3 scale = door.getScale();
-            Vector3 coordinates =door.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-
-
-
+            parent.transform.position = door.getCoordinates();
+            child.transform.localScale = door.getScale();
         }
+
         GameObject[] windows = GameObject.FindGameObjectsWithTag("window");
-        for (int i = 0; i < windows.Length; i++)
+        foreach (GameObject parent in windows)
         {
-            GameObject parent = windows[i];
-
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             Window window = parent.GetComponent<Window>();
-            Vector3 scale = window.getScale();
-            Vector3 coordinates = window.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-
-
-
+            parent.transform.position = window.getCoordinates();
+            child.transform.localScale = window.getScale();
         }
+
         GameObject[] fillers = GameObject.FindGameObjectsWithTag("wall1");
-        for (int i = 0; i < fillers.Length; i++)
+        foreach (GameObject parent in fillers)
         {
-            GameObject parent = fillers[i];
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             WallMesh wallmesh = parent.GetComponent<WallMesh>();
-            Vector3 scale = wallmesh.getScale();
-            Vector3 coordinates = wallmesh.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-            wallmesh.addWallPaperPoints(child);
+            parent.transform.position = wallmesh.getCoordinates();
+            child.transform.localScale = wallmesh.getScale();
         }
 
-        // *** UPDATE FLOOR PLANES AFTER SCALES ***
         UpdateFloorPlanes();
 
         okButton.gameObject.SetActive(false);
@@ -204,81 +168,50 @@ public class MenuFunc : MonoBehaviour
         moveCameraAndPlane();
         hamburgerbutton.GetComponent<Button>().enabled = true;
         StartGame();
-
     }
+
     public void resetScale()
     {
         float camerScale = Builder.xScale;
-        
         Builder.xScale = Builder.originalScale;
         Builder.yScale = Builder.originalScale;
-        GameObject[] wallPaperFront = GameObject.FindGameObjectsWithTag("wallPaperr");
-        for (int i = 0; i < wallPaperFront.Length; i++)
-        {
-            Destroy(wallPaperFront[i]);
-        }
+
         GameObject[] walls = GameObject.FindGameObjectsWithTag("wall");
-        for (int i = 0; i < walls.Length; i++)
+        foreach (GameObject parent in walls)
         {
-            GameObject parent = walls[i];
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             WallMesh wallmesh = parent.GetComponent<WallMesh>();
-            Vector3 scale = wallmesh.getScale();
-            Vector3 coordinates = wallmesh.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-            wallmesh.addWallPaperPoints(child);
-
-
+            parent.transform.position = wallmesh.getCoordinates();
+            child.transform.localScale = wallmesh.getScale();
         }
+
         GameObject[] doors = GameObject.FindGameObjectsWithTag("door");
-        for (int i = 0; i < doors.Length; i++)
+        foreach (GameObject parent in doors)
         {
-            GameObject parent = doors[i];
-
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             Door door = parent.GetComponent<Door>();
-            Vector3 scale = door.getScale();
-            Vector3 coordinates = door.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-
-
-
+            parent.transform.position = door.getCoordinates();
+            child.transform.localScale = door.getScale();
         }
+
         GameObject[] windows = GameObject.FindGameObjectsWithTag("window");
-        for (int i = 0; i < windows.Length; i++)
+        foreach (GameObject parent in windows)
         {
-            GameObject parent = windows[i];
-
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             Window window = parent.GetComponent<Window>();
-            Vector3 scale = window.getScale();
-            Vector3 coordinates = window.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-
-
-
+            parent.transform.position = window.getCoordinates();
+            child.transform.localScale = window.getScale();
         }
+
         GameObject[] fillers = GameObject.FindGameObjectsWithTag("wall1");
-        for (int i = 0; i < fillers.Length; i++)
+        foreach (GameObject parent in fillers)
         {
-            GameObject parent = fillers[i];
             GameObject child = parent.transform.GetChild(0).gameObject;
-
             WallMesh wallmesh = parent.GetComponent<WallMesh>();
-            Vector3 scale = wallmesh.getScale();
-            Vector3 coordinates = wallmesh.getCoordinates();
-            parent.transform.position = coordinates;
-            child.transform.localScale = scale;
-            wallmesh.addWallPaperPoints(child);
+            parent.transform.position = wallmesh.getCoordinates();
+            child.transform.localScale = wallmesh.getScale();
         }
 
-        // *** UPDATE FLOOR PLANES AFTER RESETTING SCALES ***
         UpdateFloorPlanes();
 
         float x = topCamera.transform.position.x;
@@ -286,129 +219,128 @@ public class MenuFunc : MonoBehaviour
         float z = topCamera.transform.position.z;
         x = x * (1 / camerScale) * (Builder.originalScale);
         z = z * (1 / camerScale) * (Builder.originalScale);
-
         topCamera.transform.position = new Vector3(x, y, z);
+
         x = plane.transform.position.x;
         y = plane.transform.position.y;
         z = plane.transform.position.z;
         x = x * (1 / camerScale) * (Builder.originalScale);
         z = z * (1 / camerScale) * (Builder.originalScale);
         plane.transform.position = new Vector3(x, y, z);
-        StartGame();
 
+        StartGame();
     }
-   public  void sayOkToPosition()
+
+    public void sayOkToPosition()
     {
-        //GameObject player = GameObject.FindGameObjectWithTag("Player");
         switchToMainCamera();
-        Spawner spawnerComponent= GameObject.FindGameObjectWithTag("Spawner").GetComponent<Spawner>();
-        //player.transform.position = spawnerComponent.position;
-       okButtonIsPressed = true;
+        Spawner spawnerComponent = GameObject.FindGameObjectWithTag("Spawner").GetComponent<Spawner>();
+        okButtonIsPressed = true;
         okButtonSpawner.SetActive(false);
         retryButtonSpawner.SetActive(false);
-        
-       
     }
+
     public void StartGame()
     {
         spawnButton.onClick.Invoke();
     }
+
     public void Customize()
     {
         GameObject.FindGameObjectWithTag("Player").GetComponent<CanCustomize>().enabled = true;
     }
+
     public void CancelCustomize()
     {
         GameObject.FindGameObjectWithTag("Player").GetComponent<CanCustomize>().enabled = false;
-
     }
- 
+
     public void changeToPainterCamera()
     {
         Vector3 playerPosition = player.transform.position;
         float playerYRotation = player.transform.rotation.eulerAngles.y;
-   
         painterCamera.transform.rotation = Quaternion.Euler(90, playerYRotation, 0);
         painterCamera.transform.position = new Vector3(playerPosition.x, 6.5f, playerPosition.z);
         GameObject painter = GameObject.Find("Painter");
-      
         global_selection s = painter.GetComponent<global_selection>();
         s.enabled = true;
-
-
     }
+
     public void setIsPaintingToFalse()
     {
         selected_dictionary s = GameObject.Find("Painter").GetComponent<selected_dictionary>();
         s.isPainting = false;
-
     }
+
     public void deleteProvisional()
     {
         selected_dictionary s = GameObject.Find("Painter").GetComponent<selected_dictionary>();
         s.DestroyProvisional();
-
     }
+
     public void clearProvisional()
     {
         selected_dictionary s = GameObject.Find("Painter").GetComponent<selected_dictionary>();
         s.clearProvisional();
     }
+
     public void addFurniturePiece()
     {
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().confirmAddingPiece();
-
-
     }
+
     public void cancelAddingFurniture()
     {
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().cancel();
     }
+
     public void deleteFurniture()
     {
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().delete();
     }
+
     public void confirmDeletingFurniture()
     {
-        print("confirminggg");
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().confirmDeletingFurniture();
     }
+
     public void cancelDeletingFurniture()
     {
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().cancelDeletingFurniture();
     }
+
     public void changeDoor()
     {
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().changeDoor();
     }
-   public void cancelChangedoor()
+
+    public void cancelChangedoor()
     {
         GameObject inventorysystem = GameObject.Find("inventorySystem");
         inventorysystem.GetComponent<Inventory>().cancelChangeDoor();
     }
+
     public static bool tipsDone = false;
     public void tipsAreDone()
     {
         tipsDone = true;
     }
+
     public void changeControlSpeed(float newControlSpeed)
     {
         GameObject player = GameObject.Find("FPSController");
-        print("player");
-        print(player != null);
-        
-       if(player!=null) player.GetComponent<FirstPersonController>().sliderSpeedMultiplier = newControlSpeed;
+        if (player != null) player.GetComponent<FirstPersonController>().sliderSpeedMultiplier = newControlSpeed;
+
         GameObject furnishing = GameObject.Find("Furnishing(Clone)");
-        print("furnishing");
-        print(furnishing != null);
         if (furnishing != null) furnishing.GetComponent<FirstPersonController>().sliderSpeedMultiplier = newControlSpeed;
     }
+
     public void changeLookAroundSpeed(float newControlSpeed)
     {
         GameObject player = GameObject.Find("FPSController");
@@ -416,20 +348,23 @@ public class MenuFunc : MonoBehaviour
 
         GameObject furnishing = GameObject.Find("Furnishing(Clone)");
         if (furnishing != null) furnishing.GetComponent<FirstPersonController>().sliderSpeedLookAroundMultiplier = newControlSpeed;
-
     }
+
     public void teleport()
     {
         Teleport.teleport = true;
     }
+
     public static bool paintedFurnished = false;
-   public void paintFurniture()
+    public void paintFurniture()
     {
         paintedFurnished = true;
     }
+
     public GameObject warningMenu;
     public GameObject warningReset;
     public Button scaleButton;
+
     public void checkPaintFurniture()
     {
         if (paintedFurnished)
@@ -443,23 +378,17 @@ public class MenuFunc : MonoBehaviour
             scaleButton.gameObject.SetActive(false);
         }
     }
+
     public void proceedWithPaint()
     {
         paintedFurnished = false;
-        GameObject[] paintObjs = GameObject.FindGameObjectsWithTag("paint");
-        for (int i = 0; i < paintObjs.Length; i++)
-        {
-            Destroy(paintObjs[i]);
-
-        }
-        GameObject[] furniture = GameObject.FindGameObjectsWithTag("furniture");
-        for (int i = 0; i < furniture.Length; i++)
-        {
-            Destroy(furniture[i]);
-
-        }
+        foreach (var obj in GameObject.FindGameObjectsWithTag("paint"))
+            Destroy(obj);
+        foreach (var obj in GameObject.FindGameObjectsWithTag("furniture"))
+            Destroy(obj);
         scaleButton.onClick.Invoke();
     }
+
     public Button reset;
     public void checkPaintFurnitureReset()
     {
@@ -469,132 +398,79 @@ public class MenuFunc : MonoBehaviour
         }
         else
         {
-           
             reset.onClick.Invoke();
-           
         }
     }
+
     public void proceedWithPaintReset()
     {
         paintedFurnished = false;
-        GameObject[] paintObjs = GameObject.FindGameObjectsWithTag("paint");
-        for (int i = 0; i < paintObjs.Length; i++)
-        {
-            Destroy(paintObjs[i]);
-
-        }
-        GameObject[] furniture = GameObject.FindGameObjectsWithTag("furniture");
-        for (int i = 0; i < furniture.Length; i++)
-        {
-            Destroy(furniture[i]);
-
-        }
-        
+        foreach (var obj in GameObject.FindGameObjectsWithTag("paint"))
+            Destroy(obj);
+        foreach (var obj in GameObject.FindGameObjectsWithTag("furniture"))
+            Destroy(obj);
         reset.onClick.Invoke();
-        
     }
 
-    // ----------------------- NEW: UpdateFloorPlanes -----------------------
-    // This will resize/reposition FloorSurface children under Floor_<index> containers
-    // to match current positions/scale of walls/windows/doors after Builder.xScale / yScale changes.
+    // ----------------------- Floor Surface Update -----------------------
     private void UpdateFloorPlanes()
     {
-        // same as Builder.FLOOR_HEIGHT
         const float FLOOR_HEIGHT = 2.5f;
         const float thickness = 0.1f;
-
-        // Find all floor containers named "Floor_<index>"
         GameObject[] allObjects = GameObject.FindObjectsOfType<GameObject>();
+
         foreach (GameObject obj in allObjects)
         {
             if (obj == null || !obj.name.StartsWith("Floor_")) continue;
 
             Transform floorContainer = obj.transform;
-            // try parse index
             int floorIndex = 0;
             string[] parts = obj.name.Split('_');
-            if (parts.Length >= 2)
-            {
-                int.TryParse(parts[1], out floorIndex);
-            }
+            if (parts.Length >= 2) int.TryParse(parts[1], out floorIndex);
 
-            // compute bounds from children (only consider children that are part of the floor: walls, doors, windows)
             bool foundAny = false;
-            float minX = float.MaxValue;
-            float maxX = float.MinValue;
-            float minZ = float.MaxValue;
-            float maxZ = float.MinValue;
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minZ = float.MaxValue, maxZ = float.MinValue;
 
             foreach (Transform child in floorContainer)
             {
-                // skip existing FloorSurface if present (we will update it later)
                 if (child.name == "FloorSurface") continue;
-
-                // consider renderers first
                 Renderer r = child.GetComponentInChildren<Renderer>();
                 if (r != null)
                 {
-                    Bounds b = r.bounds; // world bounds
+                    Bounds b = r.bounds;
                     minX = Mathf.Min(minX, b.min.x);
                     maxX = Mathf.Max(maxX, b.max.x);
                     minZ = Mathf.Min(minZ, b.min.z);
                     maxZ = Mathf.Max(maxZ, b.max.z);
                     foundAny = true;
                 }
-                else
-                {
-                    // fallback: use child's position and localScale to estimate
-                    Vector3 cPos = child.position;
-                    Vector3 cScale = child.localScale;
-                    // estimate extents in world by using transform right/forward scaled by localScale axes
-                    Vector3 worldMin = cPos - (child.right * (cScale.x * 0.5f)) - (child.forward * (cScale.z * 0.5f));
-                    Vector3 worldMax = cPos + (child.right * (cScale.x * 0.5f)) + (child.forward * (cScale.z * 0.5f));
-                    minX = Mathf.Min(minX, worldMin.x);
-                    maxX = Mathf.Max(maxX, worldMax.x);
-                    minZ = Mathf.Min(minZ, worldMin.z);
-                    maxZ = Mathf.Max(maxZ, worldMax.z);
-                    foundAny = true;
-                }
             }
 
-            if (!foundAny)
-            {
-                // nothing to build floor from
-                continue;
-            }
+            if (!foundAny) continue;
 
-            // Apply current global scales (Builder.xScale / yScale are already set)
-            // But since we are reading world-space bounds, they already reflect new scales.
             float centerX = (minX + maxX) / 2f;
             float centerZ = (minZ + maxZ) / 2f;
             float sizeX = Mathf.Max(0.01f, maxX - minX);
             float sizeZ = Mathf.Max(0.01f, maxZ - minZ);
 
-            // find existing FloorSurface under this container
             Transform existing = floorContainer.Find("FloorSurface");
-            GameObject floorPlane;
-            if (existing != null)
+            GameObject floorPlane = existing != null
+                ? existing.gameObject
+                : GameObject.CreatePrimitive(PrimitiveType.Cube);
+
+            if (existing == null)
             {
-                floorPlane = existing.gameObject;
-            }
-            else
-            {
-                floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 floorPlane.name = "FloorSurface";
                 floorPlane.transform.SetParent(floorContainer, false);
             }
 
-            // set position and scale (Y position so top surface sits at yOffset)
             float yOffset = floorIndex * FLOOR_HEIGHT;
             floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
             floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
 
-            // visual tweaks
             var renderer = floorPlane.GetComponent<MeshRenderer>();
-            if (renderer != null)
-            {
-                renderer.material.color = Color.grey;
-            }
+            if (renderer != null) renderer.material.color = Color.grey;
         }
     }
 }

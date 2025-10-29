@@ -12,7 +12,6 @@ public class WallMesh : MonoBehaviour
     public char rotation;
     public bool isFiller = false;
     Bounds meshBounds;
-    int wallPaperIds = 0;
     Vector3 scale;
 
     public void setGameObjectReference(GameObject obj)
@@ -40,6 +39,7 @@ public class WallMesh : MonoBehaviour
 
     void Start()
     {
+        // Buat objek tembok dasar
         GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube.layer = 9;
         cube.name = "wall";
@@ -62,48 +62,23 @@ public class WallMesh : MonoBehaviour
 
         cube.AddComponent<Rigidbody>().isKinematic = true;
 
-        // spawn titik kecil di permukaan
-        addWallPaperPoints(cube);
+        // Spawn titik seperti di Builder.cs
+        AddWallPoints(cube);
     }
 
-    private void wallPaperPoints(Vector3 pos, string name)
+    private void AddWallPoints(GameObject wall)
     {
-        GameObject go = new GameObject(name);
-        go.tag = "point";
-        go.transform.position = pos;
-        go.transform.parent = transform;
-
-        // collider kecil biar bisa diklik nanti
-        BoxCollider goCollider = go.AddComponent<BoxCollider>();
-        goCollider.isTrigger = true;
-        goCollider.size = new Vector3(0.1f, 0.1f, 0.1f);
-
-        Rigidbody rb = go.AddComponent<Rigidbody>();
-        rb.isKinematic = true;
-
-        WallPaper wp = go.AddComponent<WallPaper>();
-        wp.addId(this.wallPaperIds);
-        this.wallPaperIds++;
-    }
-
-    public void addWallPaperPoints(GameObject cube)
-    {
-        Vector3 wallScale = cube.transform.localScale;
-        Vector3 wallCenter = cube.transform.position;
-        Quaternion wallRotation = cube.transform.rotation;
+        Vector3 scale = wall.transform.localScale;
+        Vector3 center = wall.transform.position;
+        Quaternion rot = wall.transform.rotation;
 
         float spacing = 0.25f;
-        float width = wallScale.x;
-        float height = wallScale.y;
+        int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
+        int numY = Mathf.Max(1, Mathf.FloorToInt(scale.y / spacing));
 
-        // Kurangi satu supaya titik terakhir tidak keluar dari batas
-        int numX = Mathf.Max(1, Mathf.FloorToInt(width / spacing));
-        int numY = Mathf.Max(1, Mathf.FloorToInt(height / spacing));
-
-        float localHalfZ = wallScale.z / 2f;
-
-        // spawn di dua sisi (depan dan belakang)
-        float[] sides = { localHalfZ, -localHalfZ };
+        float localHalfZ = scale.z / 2f;
+        float insideOffset = 0.001f;
+        float[] sides = { localHalfZ - insideOffset, -localHalfZ + insideOffset }; // depan dan belakang
 
         foreach (float sideZ in sides)
         {
@@ -111,16 +86,33 @@ public class WallMesh : MonoBehaviour
             {
                 for (int j = 0; j <= numY; j++)
                 {
-                    float offsetX = -width / 2 + (i * spacing);
-                    float offsetY = -height / 2 + (j * spacing);
+                    float offsetX = -scale.x / 2 + i * spacing;
+                    float offsetY = -scale.y / 2 + j * spacing;
 
-                    // posisi di local space
                     Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
+                    Vector3 worldPos = rot * localPos + center;
 
-                    // convert ke world space
-                    Vector3 worldPos = wallRotation * localPos + wallCenter;
+                    GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    go.name = "point";
+                    go.transform.position = worldPos;
+                    go.transform.localScale = Vector3.one * 0.05f;
+                    go.transform.parent = wall.transform;
+                    go.tag = "point";
 
-                    wallPaperPoints(worldPos, "wall_point");
+                    // collider trigger
+                    Collider col = go.GetComponent<Collider>();
+                    col.isTrigger = true;
+
+                    // rigidbody kinematic
+                    Rigidbody rb = go.AddComponent<Rigidbody>();
+                    rb.isKinematic = true;
+
+                    // tambahkan script PointNode
+                    go.AddComponent<PointNode>();
+
+                    // warna default (kuning)
+                    var rend = go.GetComponent<Renderer>();
+                    rend.material.color = Color.yellow;
                 }
             }
         }
