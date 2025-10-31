@@ -2,60 +2,84 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
-using Kakera; // Pastikan ini sesuai dengan namespace Anda
+using Kakera;
 
 namespace Kakera
 {
-    // Script ini bertanggung jawab untuk memuat gambar dari galeri/penyimpanan
     public class ImageLoader : MonoBehaviour
     {
-        [SerializeField]
-        // Pastikan Anda memiliki referensi ke script Unimgpicker di Inspector
-        private Unimgpicker imagePicker;
-        
-        // STATIC: List untuk menyimpan semua tekstur yang diunggah
+        [SerializeField] private Unimgpicker imagePicker;
+
         public static List<Texture2D> texturesToUpload = new List<Texture2D>();
-        
-        // STATIC: Referensi ke Analyze script untuk memicu unggahan setelah selesai memilih
+
         public Analyze analyzeScript; 
-        
-        // Menu visual untuk interaksi
         public GameObject menuAfterLoading; 
         public GameObject menuBeforeLoading;
 
         void Awake()
         {
-            // Pastikan List dikosongkan saat Awake
-            texturesToUpload.Clear(); 
+            texturesToUpload.Clear();
 
-            // Listener yang dipanggil ketika gambar berhasil dipilih
+#if !UNITY_WEBGL
+            // Listener hanya untuk Android/iOS
             imagePicker.Completed += (string path) =>
             {
                 StartCoroutine(LoadImage(path));
             };
+#endif
         }
 
-        // Panggil ini dari tombol UI untuk memulai proses pemilihan
         public void OnPressShowPicker()
         {
-            imagePicker.Show("Select Image (Select 1 per Floor)", "unimgpicker");
+#if UNITY_WEBGL
+            // Jalankan JavaScript file picker di WebGL
+            Application.ExternalEval(@"
+                var input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = function(e) {
+                    var file = e.target.files[0];
+                    var reader = new FileReader();
+                    reader.onload = function(event) {
+                        var base64Data = event.target.result.split(',')[1];
+                        SendMessage('" + gameObject.name + @"', 'OnWebGLImagePicked', base64Data);
+                    };
+                    reader.readAsDataURL(file);
+                };
+                input.click();
+            ");
+#else
+            // Android/iOS native picker
+            imagePicker.Show("Select Image", "unimgpicker");
+#endif
         }
 
-        // Panggil ini dari tombol UI untuk mengirim semua gambar yang telah dipilih
+        // Callback dari JavaScript (WebGL)
+        public void OnWebGLImagePicked(string base64)
+        {
+            byte[] bytes = System.Convert.FromBase64String(base64);
+            Texture2D tex = new Texture2D(2, 2);
+            tex.LoadImage(bytes);
+            texturesToUpload.Add(tex);
+
+            Debug.Log("Image added (WebGL). Total images: " + texturesToUpload.Count);
+
+            if (menuBeforeLoading != null) menuBeforeLoading.SetActive(false);
+            if (menuAfterLoading != null) menuAfterLoading.SetActive(true);
+        }
+
         public void OnPressSendAllImages()
         {
             if (texturesToUpload.Count > 0)
             {
-                // Panggil coroutine untuk mengirim semua gambar
                 analyzeScript.sendToServerLoadedImage();
             }
             else
             {
                 Debug.LogError("No images selected yet.");
-                // Tampilkan pesan error jika perlu
             }
         }
-        
+
         private IEnumerator LoadImage(string path)
         {
             var url = "file://" + path;
@@ -69,17 +93,10 @@ namespace Kakera
             else
             {
                 var texture = ((DownloadHandlerTexture)unityWebRequestTexture.downloadHandler).texture;
-                if (texture == null)
+                if (texture != null)
                 {
-                    Debug.LogError("Failed to load texture.");
-                }
-                else 
-                {
-                    // TAMBAHAN KRUSIAL: Tambahkan tekstur ke List
                     texturesToUpload.Add(texture);
-                    Debug.Log("Image added. Total images: " + texturesToUpload.Count);
-                    
-                    // Contoh feedback visual (misalnya, ganti menu atau tampilkan jumlah file yang dipilih)
+                    Debug.Log("Image added (Mobile). Total images: " + texturesToUpload.Count);
                     if (menuBeforeLoading != null) menuBeforeLoading.SetActive(false);
                     if (menuAfterLoading != null) menuAfterLoading.SetActive(true);
                 }
