@@ -92,27 +92,28 @@ public class WallMesh : MonoBehaviour
                     Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
                     Vector3 worldPos = rot * localPos + center;
 
-                    GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    go.name = "point";
+                    // --- Buat point TANPA renderer ---
+                    GameObject go = new GameObject("point");
                     go.transform.position = worldPos;
                     go.transform.localScale = Vector3.one * 0.05f;
                     go.transform.parent = wall.transform;
                     go.tag = "point";
 
-                    // collider trigger
-                    Collider col = go.GetComponent<Collider>();
+                    // Tambahkan collider kecil (trigger)
+                    SphereCollider col = go.AddComponent<SphereCollider>();
                     col.isTrigger = true;
+                    col.radius = 0.025f;
 
-                    // rigidbody kinematic
+                    // Tambahkan rigidbody kinematic
                     Rigidbody rb = go.AddComponent<Rigidbody>();
                     rb.isKinematic = true;
 
-                    // tambahkan script PointNode
+                    // Tambahkan script PointNode
                     go.AddComponent<PointNode>();
 
-                    // warna default (kuning)
+                    // Pastikan tidak ada renderer
                     var rend = go.GetComponent<Renderer>();
-                    rend.material.color = Color.yellow;
+                    if (rend != null) Destroy(rend);
                 }
             }
         }

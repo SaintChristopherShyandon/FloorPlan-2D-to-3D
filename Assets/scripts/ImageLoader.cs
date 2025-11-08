@@ -12,27 +12,29 @@ namespace Kakera
 
         public static List<Texture2D> texturesToUpload = new List<Texture2D>();
 
-        public Analyze analyzeScript; 
-        public GameObject menuAfterLoading; 
+        public Analyze analyzeScript;
+        public GameObject menuAfterLoading;
         public GameObject menuBeforeLoading;
 
         void Awake()
         {
             texturesToUpload.Clear();
 
-#if !UNITY_WEBGL
-            // Listener hanya untuk Android/iOS
-            imagePicker.Completed += (string path) =>
+#if UNITY_EDITOR || (!UNITY_WEBGL && (UNITY_ANDROID || UNITY_IOS))
+            if (imagePicker != null)
             {
-                StartCoroutine(LoadImage(path));
-            };
+                imagePicker.Completed += (string path) =>
+                {
+                    StartCoroutine(LoadImage(path));
+                };
+            }
 #endif
         }
 
         public void OnPressShowPicker()
         {
-#if UNITY_WEBGL
-            // Jalankan JavaScript file picker di WebGL
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // --- WEBGL FILE PICKER ---
             Application.ExternalEval(@"
                 var input = document.createElement('input');
                 input.type = 'file';
@@ -42,19 +44,22 @@ namespace Kakera
                     var reader = new FileReader();
                     reader.onload = function(event) {
                         var base64Data = event.target.result.split(',')[1];
-                        SendMessage('" + gameObject.name + @"', 'OnWebGLImagePicked', base64Data);
+                        SendMessage('" + nameof(ImageLoader) + @"', 'OnWebGLImagePicked', base64Data);
                     };
                     reader.readAsDataURL(file);
                 };
                 input.click();
             ");
 #else
-            // Android/iOS native picker
-            imagePicker.Show("Select Image", "unimgpicker");
+            // --- EDITOR / MOBILE PICKER ---
+            if (imagePicker != null)
+                imagePicker.Show("Select Image (Select 1 per Floor)", "unimgpicker");
+            else
+                Debug.LogWarning("ImagePicker not assigned in Inspector!");
 #endif
         }
 
-        // Callback dari JavaScript (WebGL)
+        // WebGL callback
         public void OnWebGLImagePicked(string base64)
         {
             byte[] bytes = System.Convert.FromBase64String(base64);
@@ -62,7 +67,7 @@ namespace Kakera
             tex.LoadImage(bytes);
             texturesToUpload.Add(tex);
 
-            Debug.Log("Image added (WebGL). Total images: " + texturesToUpload.Count);
+            Debug.Log("✅ Image added (WebGL). Total: " + texturesToUpload.Count);
 
             if (menuBeforeLoading != null) menuBeforeLoading.SetActive(false);
             if (menuAfterLoading != null) menuAfterLoading.SetActive(true);
@@ -86,9 +91,9 @@ namespace Kakera
             var unityWebRequestTexture = UnityWebRequestTexture.GetTexture(url);
             yield return unityWebRequestTexture.SendWebRequest();
 
-            if (unityWebRequestTexture.isNetworkError || unityWebRequestTexture.isHttpError)
+            if (unityWebRequestTexture.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError("Failed to load texture url: " + url + " Error: " + unityWebRequestTexture.error);
+                Debug.LogError("Failed to load texture: " + unityWebRequestTexture.error);
             }
             else
             {
@@ -96,7 +101,8 @@ namespace Kakera
                 if (texture != null)
                 {
                     texturesToUpload.Add(texture);
-                    Debug.Log("Image added (Mobile). Total images: " + texturesToUpload.Count);
+                    Debug.Log("✅ Image added (Editor/Mobile). Total: " + texturesToUpload.Count);
+
                     if (menuBeforeLoading != null) menuBeforeLoading.SetActive(false);
                     if (menuAfterLoading != null) menuAfterLoading.SetActive(true);
                 }

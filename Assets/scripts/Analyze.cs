@@ -22,7 +22,7 @@ public class Analyze : MonoBehaviour
     UnityWebRequest res;
     
     // Alamat API
-    private const string API_URL = "http://localhost:5000"; // Ganti jika Anda menghosting di tempat lain
+    private const string API_URL = "https://Shyandon-floorplan3d-api.hf.space/predict";
     
     // Fungsi yang dipanggil dari UI untuk memulai unggahan
     public void sendToServerLoadedImage()
