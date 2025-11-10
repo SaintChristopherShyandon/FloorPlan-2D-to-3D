@@ -1,65 +1,54 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
-public class FreeCameraController : MonoBehaviour
+public class FreeLookCamera : MonoBehaviour
 {
-    [Header("Movement Settings")]
-    public float moveSpeed = 5f;
-    public float sprintMultiplier = 2f;
+    public float movementSpeed = 5f;
+    public float rotationSpeed = 2f;
+    public float zoomSpeed = 5f;
+    public float minZoomFOV = 10f;
+    public float maxZoomFOV = 60f;
 
-    [Header("Mouse Settings")]
-    public float mouseSensitivity = 100f;
-    public Transform cameraTransform;
-
-    private AudioSource audioSource;
-    private float rotationX = 0f;
-    private float rotationY = 0f;
+    private float currentZoomFOV;
 
     void Start()
     {
-        if (cameraTransform == null)
-        {
-            cameraTransform = GetComponentInChildren<Camera>()?.transform;
-        }
+        currentZoomFOV = Camera.main.fieldOfView; // Initialize with current FOV
     }
 
     void Update()
     {
-        HandleMovement();
-        HandleMouseLook();
-    }
+        // Movement
+        float horizontalInput = Input.GetAxis("Horizontal");
+        float verticalInput = Input.GetAxis("Vertical");
+        float upDownInput = 0;
 
-    private void HandleMovement()
-    {
-        if (Keyboard.current == null) return;
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb.spaceKey.isPressed) upDownInput += 1;
+        if (kb.leftCtrlKey.isPressed || kb.rightCtrlKey.isPressed) upDownInput -= 1;
 
-        Vector3 move = Vector3.zero;
+        Vector3 moveDirection = transform.right * horizontalInput +
+                                transform.forward * verticalInput +
+                                transform.up * upDownInput;
 
-        // WASD movement
-        if (Keyboard.current.wKey.isPressed) move += transform.forward;
-        if (Keyboard.current.sKey.isPressed) move -= transform.forward;
-        if (Keyboard.current.aKey.isPressed) move -= transform.right;
-        if (Keyboard.current.dKey.isPressed) move += transform.right;
-        if (Keyboard.current.qKey.isPressed) move -= transform.up;   // turun
-        if (Keyboard.current.eKey.isPressed) move += transform.up;   // naik
+        transform.position += moveDirection * movementSpeed * Time.deltaTime;
 
-        // Sprint
-        float speed = moveSpeed;
-        if (Keyboard.current.leftShiftKey.isPressed)
-            speed *= sprintMultiplier;
-    }
+        // Rotation
+        if (Input.GetMouseButton(1)) // Right-click to rotate
+        {
+            float mouseX = Input.GetAxis("Mouse X");
+            float mouseY = Input.GetAxis("Mouse Y");
 
-    private void HandleMouseLook()
-    {
-        if (Mouse.current == null) return;
+            transform.Rotate(Vector3.up, mouseX * rotationSpeed, Space.World);
+            transform.Rotate(Vector3.left, mouseY * rotationSpeed, Space.Self);
+        }
 
-        Vector2 mouseDelta = Mouse.current.delta.ReadValue();
-        rotationY += mouseDelta.x * mouseSensitivity * Time.deltaTime;
-        rotationX -= mouseDelta.y * mouseSensitivity * Time.deltaTime;
-        rotationX = Mathf.Clamp(rotationX, -90f, 90f);
-
-        transform.rotation = Quaternion.Euler(0f, rotationY, 0f);
-        if (cameraTransform != null)
-            cameraTransform.localRotation = Quaternion.Euler(rotationX, 0f, 0f);
+        // Zoom (Field of View)
+        float scrollInput = Input.GetAxis("Mouse ScrollWheel");
+        if (scrollInput != 0)
+        {
+            currentZoomFOV -= scrollInput * zoomSpeed;
+            currentZoomFOV = Mathf.Clamp(currentZoomFOV, minZoomFOV, maxZoomFOV);
+            Camera.main.fieldOfView = currentZoomFOV;
+        }
     }
 }

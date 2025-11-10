@@ -133,34 +133,45 @@ public class Builder : MonoBehaviour
 
     private void CreateBuilding()
     {
-        foreach (var floor in floorDataArray.images)
+        int totalFloors = floorDataArray.images.Length;
+
+        for (int i = 0; i < totalFloors; i++)
         {
+            var floor = floorDataArray.images[i];
             float yOffset = floor.floor_index * FLOOR_HEIGHT;
             Debug.Log($"[Builder] Membangun lantai {floor.floor_index} pada Y offset {yOffset}");
 
-            // Buat kontainer untuk setiap lantai agar rapi di Hierarchy
+            // Buat kontainer untuk setiap lantai
             GameObject floorContainer = new GameObject($"Floor_{floor.floor_index}");
             floorContainer.tag = "FloorContainer";
             CreateFloorPlane(floor, floorContainer.transform, yOffset);
 
-            // Tambahkan dinding lebih dahulu
-            for (int i = 0; i < floor.points.Length; i++)
+            // Tambahkan dinding
+            for (int j = 0; j < floor.points.Length; j++)
             {
-                if (floor.classes[i].name == "wall")
+                if (floor.classes[j].name == "wall")
                 {
-                    CreateObjectForFloor(floor.points[i], floor.classes[i].name, floorContainer.transform, yOffset);
+                    CreateObjectForFloor(floor.points[j], floor.classes[j].name, floorContainer.transform, yOffset);
                 }
             }
 
-            // Lalu buat pintu dan jendela
-            for (int i = 0; i < floor.points.Length; i++)
+            // Tambahkan pintu dan jendela
+            for (int j = 0; j < floor.points.Length; j++)
             {
-                string className = floor.classes[i].name;
+                string className = floor.classes[j].name;
                 if (className != "wall")
                 {
-                    CreateObjectForFloor(floor.points[i], className, floorContainer.transform, yOffset);
+                    CreateObjectForFloor(floor.points[j], className, floorContainer.transform, yOffset);
                 }
             }
+
+            // Jika ini lantai terakhir → tambahkan atap
+            if (i == totalFloors - 1)
+            {
+                float roofHeight = yOffset + FLOOR_HEIGHT;
+                CreateRoofPlane(floor, floorContainer.transform, roofHeight);
+            }
+
             if (PathfindingGrid.Instance != null)
             {
                 PathfindingGrid.Instance.GenerateGrid();
@@ -180,7 +191,6 @@ public class Builder : MonoBehaviour
         obj.AddComponent<MeshFilter>();
         obj.AddComponent<MeshRenderer>();
 
-        // Gunakan switch expression agar lebih aman di Unity 6 (C# 10+)
         switch (className)
         {
             case "wall":
@@ -214,58 +224,98 @@ public class Builder : MonoBehaviour
     //  PEMBUATAN LANTAI (FLOOR PLANE)
     // =======================================================================
 
-private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffset)
-{
-    // 1. Cari batas terluar dari semua titik di lantai ini
-    float minX = float.MaxValue;
-    float maxX = float.MinValue;
-    float minZ = float.MaxValue;
-    float maxZ = float.MinValue;
-
-    foreach (var p in floorData.points)
+    private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffset)
     {
-        minZ = Mathf.Min(minZ, (float)p.x1, (float)p.x2);
-        maxZ = Mathf.Max(maxZ, (float)p.x1, (float)p.x2);
-        minX = Mathf.Min(minX, (float)p.y1, (float)p.y2);
-        maxX = Mathf.Max(maxX, (float)p.y1, (float)p.y2);
+        float minX = float.MaxValue;
+        float maxX = float.MinValue;
+        float minZ = float.MaxValue;
+        float maxZ = float.MinValue;
+
+        foreach (var p in floorData.points)
+        {
+            minZ = Mathf.Min(minZ, (float)p.x1, (float)p.x2);
+            maxZ = Mathf.Max(maxZ, (float)p.x1, (float)p.x2);
+            minX = Mathf.Min(minX, (float)p.y1, (float)p.y2);
+            maxX = Mathf.Max(maxX, (float)p.y1, (float)p.y2);
+        }
+
+        if (minX == float.MaxValue) return;
+
+        minX *= yScale;
+        maxX *= yScale;
+        minZ *= xScale;
+        maxZ *= xScale;
+
+        float centerX = (minX + maxX) / 2f;
+        float centerZ = (minZ + maxZ) / 2f;
+        float sizeX = maxX - minX;
+        float sizeZ = maxZ - minZ;
+        float thickness = 0.1f;
+
+        GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        floorPlane.name = "FloorSurface";
+        floorPlane.transform.SetParent(parent, false);
+        floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
+        floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+
+        var renderer = floorPlane.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            renderer.material.color = Color.grey;
+        }
+
+        var rb = floorPlane.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
+
+        AddFloorPoints(floorPlane);
     }
 
-    if (minX == float.MaxValue) return;
-
-    // 2. Terapkan skala global
-    minX *= yScale;
-    maxX *= yScale;
-    minZ *= xScale;
-    maxZ *= xScale;
-
-    // 3. Hitung pusat dan ukuran lantai
-    float centerX = (minX + maxX) / 2f;
-    float centerZ = (minZ + maxZ) / 2f;
-    float sizeX = maxX - minX;
-    float sizeZ = maxZ - minZ;
-    float thickness = 0.1f; // Ketebalan lantai
-
-    // 4. Buat objek lantai
-    GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
-    floorPlane.name = "FloorSurface";
-    floorPlane.transform.SetParent(parent, false);
-    floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
-    floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
-
-    // 5. Warna lantai
-    var renderer = floorPlane.GetComponent<MeshRenderer>();
-    if (renderer != null)
+    // =======================================================================
+    //  PEMBUATAN ATAP (ROOF PLANE)
+    // =======================================================================
+    private void CreateRoofPlane(FloorData floorData, Transform parent, float yOffset)
     {
-        renderer.material.color = Color.grey;
+        float minX = float.MaxValue;
+        float maxX = float.MinValue;
+        float minZ = float.MaxValue;
+        float maxZ = float.MinValue;
+
+        foreach (var p in floorData.points)
+        {
+            minZ = Mathf.Min(minZ, (float)p.x1, (float)p.x2);
+            maxZ = Mathf.Max(maxZ, (float)p.x1, (float)p.x2);
+            minX = Mathf.Min(minX, (float)p.y1, (float)p.y2);
+            maxX = Mathf.Max(maxX, (float)p.y1, (float)p.y2);
+        }
+
+        if (minX == float.MaxValue) return;
+
+        minX *= yScale;
+        maxX *= yScale;
+        minZ *= xScale;
+        maxZ *= xScale;
+
+        float centerX = (minX + maxX) / 2f;
+        float centerZ = (minZ + maxZ) / 2f;
+        float sizeX = maxX - minX;
+        float sizeZ = maxZ - minZ;
+        float thickness = 0.1f;
+
+        GameObject roofPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        roofPlane.name = "RoofSurface";
+        roofPlane.transform.SetParent(parent, false);
+        roofPlane.transform.position = new Vector3(centerX, yOffset + (thickness / 2f), centerZ);
+        roofPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+
+        var renderer = roofPlane.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            renderer.material.color = new Color(0.5f, 0, 0); // dark red
+        }
+
+        var rb = roofPlane.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
     }
-
-    // 6. Tambahkan rigidbody agar bisa diatur
-    var rb = floorPlane.AddComponent<Rigidbody>();
-    rb.isKinematic = true;
-
-    // 7. Spawn point di kedua sisi (atas dan bawah)
-    AddFloorPoints(floorPlane);
-}
 
     private void AddFloorPoints(GameObject floor)
     {
@@ -278,7 +328,7 @@ private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffs
         int numZ = Mathf.Max(1, Mathf.FloorToInt(scale.z / spacing));
 
         float localHalfY = scale.y / 2f;
-        float[] sides = { localHalfY, -localHalfY }; // atas dan bawah
+        float[] sides = { localHalfY, -localHalfY };
 
         foreach (float sideY in sides)
         {
@@ -299,17 +349,14 @@ private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffs
                     go.transform.parent = floor.transform;
                     go.tag = "point";
 
-                    // tambahkan komponen fisik
                     Collider col = go.GetComponent<Collider>();
                     col.isTrigger = true;
 
                     Rigidbody rb = go.AddComponent<Rigidbody>();
                     rb.isKinematic = true;
 
-                    // tambahkan script PointNode.cs agar bisa dipakai pathfinding
                     PointNode node = go.AddComponent<PointNode>();
 
-                    // atur warna default (kuning)
                     var rend = go.GetComponent<Renderer>();
                     rend.material.color = Color.yellow;
                 }
