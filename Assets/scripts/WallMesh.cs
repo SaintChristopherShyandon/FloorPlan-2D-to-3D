@@ -66,58 +66,52 @@ public class WallMesh : MonoBehaviour
         AddWallPoints(cube);
     }
 
-    private void AddWallPoints(GameObject wall)
+private void AddWallPoints(GameObject wall)
+{
+    Vector3 scale = wall.transform.localScale;
+    Vector3 center = wall.transform.position;
+    Quaternion rot = wall.transform.rotation;
+
+    float spacing = 0.15f;
+    int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
+    int numY = Mathf.Max(1, Mathf.FloorToInt(scale.y / spacing));
+    float halfZ = scale.z / 2f;
+    float offsetOut = 0.02f;
+
+    // sama persis pola dengan floor: ±normalAxis ± offsetOut
+    float[] sides = { halfZ + offsetOut, -halfZ - offsetOut };
+
+    foreach (float sideZ in sides)
     {
-        Vector3 scale = wall.transform.localScale;
-        Vector3 center = wall.transform.position;
-        Quaternion rot = wall.transform.rotation;
-
-        float spacing = 0.25f;
-        int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
-        int numY = Mathf.Max(1, Mathf.FloorToInt(scale.y / spacing));
-
-        float localHalfZ = scale.z / 2f;
-        float insideOffset = 0.001f;
-        float[] sides = { localHalfZ - insideOffset, -localHalfZ + insideOffset }; // depan dan belakang
-
-        foreach (float sideZ in sides)
+        for (int i = 0; i <= numX; i++)
         {
-            for (int i = 0; i <= numX; i++)
+            for (int j = 0; j <= numY; j++)
             {
-                for (int j = 0; j <= numY; j++)
-                {
-                    float offsetX = -scale.x / 2 + i * spacing;
-                    float offsetY = -scale.y / 2 + j * spacing;
+                float offsetX = -scale.x / 2 + i * spacing;
+                float offsetY = -scale.y / 2 + j * spacing;
 
-                    Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
-                    Vector3 worldPos = rot * localPos + center;
+                Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
+                Vector3 worldPos = rot * localPos + center;
 
-                    // --- Buat point TANPA renderer ---
-                    GameObject go = new GameObject("point");
-                    go.transform.position = worldPos;
-                    go.transform.localScale = Vector3.one * 0.05f;
-                    go.transform.parent = wall.transform;
-                    go.tag = "point";
+                GameObject go = new GameObject("point");
+                go.transform.SetParent(wall.transform, false);
+                go.transform.position = worldPos;
+                go.transform.localScale = Vector3.one * 0.05f;
+                go.tag = "point";
 
-                    // Tambahkan collider kecil (trigger)
-                    SphereCollider col = go.AddComponent<SphereCollider>();
-                    col.isTrigger = true;
-                    col.radius = 0.025f;
+                SphereCollider col = go.AddComponent<SphereCollider>();
+                col.isTrigger = true;
+                col.radius = 0.2f;
 
-                    // Tambahkan rigidbody kinematic
-                    Rigidbody rb = go.AddComponent<Rigidbody>();
-                    rb.isKinematic = true;
+                Rigidbody rb = go.AddComponent<Rigidbody>();
+                rb.isKinematic = true;
 
-                    // Tambahkan script PointNode
-                    go.AddComponent<PointNode>();
-
-                    // Pastikan tidak ada renderer
-                    var rend = go.GetComponent<Renderer>();
-                    if (rend != null) Destroy(rend);
-                }
+                go.AddComponent<PointNode>();
             }
         }
     }
+}
+
 
     private Quaternion getAngle(char c)
     {

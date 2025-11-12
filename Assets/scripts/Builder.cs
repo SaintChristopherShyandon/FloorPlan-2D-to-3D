@@ -5,22 +5,15 @@ using UnityEngine.SceneManagement;
 
 public class Builder : MonoBehaviour
 {
-    // Tinggi per lantai dalam unit Unity (misalnya 4 meter)
     private const float FLOOR_HEIGHT = 2.5f;
 
-    // Data statis global
     public static float xScale;
     public static float yScale;
     public static float originalScale;
     public static string data;
 
-    // Objek spawner (jika nanti ingin dipakai)
     [Header("Optional Spawner Reference")]
     public GameObject spwaner;
-
-    // =======================================================================
-    //  DATA KELAS UNTUK JSON PARSING (disesuaikan dengan format API baru)
-    // =======================================================================
 
     [Serializable]
     public class Point
@@ -54,15 +47,7 @@ public class Builder : MonoBehaviour
         public FloorData[] images;
     }
 
-    // =======================================================================
-    //  VARIABEL PRIVATE
-    // =======================================================================
-
     private FloorDataArray floorDataArray;
-
-    // =======================================================================
-    //  PEMBACA JSON & INISIALISASI
-    // =======================================================================
 
     private void Awake()
     {
@@ -70,7 +55,7 @@ public class Builder : MonoBehaviour
 
         if (string.IsNullOrEmpty(data))
         {
-            Debug.LogError("[Builder] Data JSON kosong! Pastikan Analyze.data sudah terisi sebelum memuat scene ini.");
+            Debug.LogError("[Builder] Data JSON kosong!");
             return;
         }
 
@@ -81,13 +66,11 @@ public class Builder : MonoBehaviour
             CreateBuilding();
             var navMesh = FindObjectOfType<PathFinderNavMesh>();
             if (navMesh != null)
-            {
                 navMesh.BakeNavMesh();
-            }
         }
         else
         {
-            Debug.LogError("[Builder] Gagal memuat data lantai. Tidak ada struktur bangunan yang dapat dibuat.");
+            Debug.LogError("[Builder] Gagal memuat data lantai.");
         }
     }
 
@@ -97,39 +80,27 @@ public class Builder : MonoBehaviour
         {
             floorDataArray = JsonUtility.FromJson<FloorDataArray>(data);
             if (floorDataArray == null || floorDataArray.images == null)
-            {
                 throw new Exception("JSON parsing gagal atau array 'images' tidak ditemukan.");
-            }
 
-            Debug.Log($"[Builder] Parsing sukses. Jumlah lantai: {floorDataArray.images.Length}");
-
-            // Hitung rata-rata dimensi pintu dari semua lantai
             float totalAvgDoor = 0f;
             int totalFloors = floorDataArray.images.Length;
 
             foreach (var floor in floorDataArray.images)
-            {
                 totalAvgDoor += floor.averageDoor;
-            }
 
             float combinedAvgDoor = totalFloors > 0 ? totalAvgDoor / totalFloors : 0f;
 
-            // Set skala global
             xScale = combinedAvgDoor > 0 ? 1.0f / combinedAvgDoor : 0.01f;
             yScale = xScale;
             originalScale = xScale;
 
-            Debug.Log($"[Builder] Skala Global (1/AvgDoor): {originalScale}");
+            Debug.Log($"[Builder] Skala Global: {originalScale}");
         }
         catch (Exception e)
         {
             Debug.LogError("[Builder] Error parsing JSON: " + e.Message);
         }
     }
-
-    // =======================================================================
-    //  PEMBANGUNAN GEDUNG MULTI-LANTAI
-    // =======================================================================
 
     private void CreateBuilding()
     {
@@ -139,33 +110,20 @@ public class Builder : MonoBehaviour
         {
             var floor = floorDataArray.images[i];
             float yOffset = floor.floor_index * FLOOR_HEIGHT;
-            Debug.Log($"[Builder] Membangun lantai {floor.floor_index} pada Y offset {yOffset}");
 
-            // Buat kontainer untuk setiap lantai
             GameObject floorContainer = new GameObject($"Floor_{floor.floor_index}");
             floorContainer.tag = "FloorContainer";
+
             CreateFloorPlane(floor, floorContainer.transform, yOffset);
 
-            // Tambahkan dinding
-            for (int j = 0; j < floor.points.Length; j++)
-            {
-                if (floor.classes[j].name == "wall")
-                {
-                    CreateObjectForFloor(floor.points[j], floor.classes[j].name, floorContainer.transform, yOffset);
-                }
-            }
-
-            // Tambahkan pintu dan jendela
+            // Buat objek bangunan
             for (int j = 0; j < floor.points.Length; j++)
             {
                 string className = floor.classes[j].name;
-                if (className != "wall")
-                {
-                    CreateObjectForFloor(floor.points[j], className, floorContainer.transform, yOffset);
-                }
+                CreateObjectForFloor(floor.points[j], className, floorContainer.transform, yOffset);
             }
 
-            // Jika ini lantai terakhir → tambahkan atap
+            // Tambahkan atap di lantai terakhir
             if (i == totalFloors - 1)
             {
                 float roofHeight = yOffset + FLOOR_HEIGHT;
@@ -173,9 +131,7 @@ public class Builder : MonoBehaviour
             }
 
             if (PathfindingGrid.Instance != null)
-            {
                 PathfindingGrid.Instance.GenerateGrid();
-            }
         }
     }
 
@@ -199,37 +155,26 @@ public class Builder : MonoBehaviour
                 wall.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2, yOffset);
                 wall.setGameObjectReference(obj);
                 break;
-
             case "door":
                 obj.tag = "door";
                 var door = obj.AddComponent<Door>();
                 door.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2, yOffset);
                 door.setGameObjectReference(obj);
                 break;
-
             case "window":
                 obj.tag = "window";
                 var window = obj.AddComponent<Window>();
                 window.setPoints((float)p.x1, (float)p.y1, (float)p.x2, (float)p.y2, yOffset);
                 window.setGameObjectReference(obj);
                 break;
-
-            default:
-                Debug.LogWarning($"[Builder] Class tidak dikenal: {className}");
-                break;
         }
     }
 
-    // =======================================================================
-    //  PEMBUATAN LANTAI (FLOOR PLANE)
-    // =======================================================================
+    // ============================ FLOOR ============================
 
     private void CreateFloorPlane(FloorData floorData, Transform parent, float yOffset)
     {
-        float minX = float.MaxValue;
-        float maxX = float.MinValue;
-        float minZ = float.MaxValue;
-        float maxZ = float.MinValue;
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
 
         foreach (var p in floorData.points)
         {
@@ -241,10 +186,8 @@ public class Builder : MonoBehaviour
 
         if (minX == float.MaxValue) return;
 
-        minX *= yScale;
-        maxX *= yScale;
-        minZ *= xScale;
-        maxZ *= xScale;
+        minX *= yScale; maxX *= yScale;
+        minZ *= xScale; maxZ *= xScale;
 
         float centerX = (minX + maxX) / 2f;
         float centerZ = (minZ + maxZ) / 2f;
@@ -255,30 +198,19 @@ public class Builder : MonoBehaviour
         GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
         floorPlane.name = "FloorSurface";
         floorPlane.transform.SetParent(parent, false);
-        floorPlane.transform.position = new Vector3(centerX, yOffset - (thickness / 2f), centerZ);
+        floorPlane.transform.position = new Vector3(centerX, yOffset - thickness / 2f, centerZ);
         floorPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+        floorPlane.GetComponent<MeshRenderer>().material.color = Color.grey;
+        floorPlane.AddComponent<Rigidbody>().isKinematic = true;
 
-        var renderer = floorPlane.GetComponent<MeshRenderer>();
-        if (renderer != null)
-        {
-            renderer.material.color = Color.grey;
-        }
-
-        var rb = floorPlane.AddComponent<Rigidbody>();
-        rb.isKinematic = true;
-
-        AddFloorPoints(floorPlane);
+        AddInvisiblePoints(floorPlane);
     }
 
-    // =======================================================================
-    //  PEMBUATAN ATAP (ROOF PLANE)
-    // =======================================================================
+    // ============================ ROOF ============================
+
     private void CreateRoofPlane(FloorData floorData, Transform parent, float yOffset)
     {
-        float minX = float.MaxValue;
-        float maxX = float.MinValue;
-        float minZ = float.MaxValue;
-        float maxZ = float.MinValue;
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
 
         foreach (var p in floorData.points)
         {
@@ -290,10 +222,8 @@ public class Builder : MonoBehaviour
 
         if (minX == float.MaxValue) return;
 
-        minX *= yScale;
-        maxX *= yScale;
-        minZ *= xScale;
-        maxZ *= xScale;
+        minX *= yScale; maxX *= yScale;
+        minZ *= xScale; maxZ *= xScale;
 
         float centerX = (minX + maxX) / 2f;
         float centerZ = (minZ + maxZ) / 2f;
@@ -304,29 +234,25 @@ public class Builder : MonoBehaviour
         GameObject roofPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
         roofPlane.name = "RoofSurface";
         roofPlane.transform.SetParent(parent, false);
-        roofPlane.transform.position = new Vector3(centerX, yOffset + (thickness / 2f), centerZ);
+        roofPlane.transform.position = new Vector3(centerX, yOffset + thickness / 2f, centerZ);
         roofPlane.transform.localScale = new Vector3(sizeX, thickness, sizeZ);
+        roofPlane.GetComponent<MeshRenderer>().material.color = new Color(0.5f, 0, 0);
+        roofPlane.AddComponent<Rigidbody>().isKinematic = true;
 
-        var renderer = roofPlane.GetComponent<MeshRenderer>();
-        if (renderer != null)
-        {
-            renderer.material.color = new Color(0.5f, 0, 0); // dark red
-        }
-
-        var rb = roofPlane.AddComponent<Rigidbody>();
-        rb.isKinematic = true;
+        AddInvisiblePoints(roofPlane);
     }
 
-    private void AddFloorPoints(GameObject floor)
-    {
-        Vector3 scale = floor.transform.localScale;
-        Vector3 center = floor.transform.position;
-        Quaternion rot = floor.transform.rotation;
+    // ============================ INVISIBLE POINTS ============================
 
-        float spacing = 0.25f;
+    private void AddInvisiblePoints(GameObject plane)
+    {
+        Vector3 scale = plane.transform.localScale;
+        Vector3 center = plane.transform.position;
+        Quaternion rot = plane.transform.rotation;
+
+        float spacing = 0.15f;
         int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
         int numZ = Mathf.Max(1, Mathf.FloorToInt(scale.z / spacing));
-
         float localHalfY = scale.y / 2f;
         float[] sides = { localHalfY, -localHalfY };
 
@@ -338,27 +264,24 @@ public class Builder : MonoBehaviour
                 {
                     float offsetX = -scale.x / 2 + i * spacing;
                     float offsetZ = -scale.z / 2 + j * spacing;
-
                     Vector3 localPos = new Vector3(offsetX, sideY, offsetZ);
                     Vector3 worldPos = rot * localPos + center;
 
-                    GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    go.name = "point";
+                    // === BUAT POINT TANPA RENDERER ===
+                    GameObject go = new GameObject("point");
                     go.transform.position = worldPos;
                     go.transform.localScale = Vector3.one * 0.05f;
-                    go.transform.parent = floor.transform;
+                    go.transform.parent = plane.transform;
                     go.tag = "point";
 
-                    Collider col = go.GetComponent<Collider>();
+                    SphereCollider col = go.AddComponent<SphereCollider>();
                     col.isTrigger = true;
+                    col.radius = 0.5f;
 
                     Rigidbody rb = go.AddComponent<Rigidbody>();
                     rb.isKinematic = true;
 
-                    PointNode node = go.AddComponent<PointNode>();
-
-                    var rend = go.GetComponent<Renderer>();
-                    rend.material.color = Color.yellow;
+                    go.AddComponent<PointNode>();
                 }
             }
         }
