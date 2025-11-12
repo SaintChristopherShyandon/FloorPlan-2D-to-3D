@@ -1,19 +1,25 @@
 using UnityEngine;
 using System.Collections.Generic;
-using System.Linq;
+using System.Diagnostics; // untuk Stopwatch
+using Debug = UnityEngine.Debug;
 
 public class GraphManager : MonoBehaviour
 {
-    public float maxDistance = 2.0f; // jarak maksimum antar node yang masih dianggap terhubung
+    [Header("Graph")]
+    public float maxDistance = 2.0f; // jarak maksimum antar node yang dianggap terhubung
+    public bool use2D = false;       // jika true, hash grid abaikan sumbu Y (cocok untuk game 2D/topdown)
+    public bool logTimings = true;
+
     private List<PointNode> nodes = new List<PointNode>();
+    private static Material sharedLineMaterial; // hindari alokasi material per path
 
     void Start()
     {
-        BuildConnections();
+        BuildConnections(); // bisa dipanggil ulang saat layout node berubah
     }
 
     // ---------------------------------------------------------------
-    // MEMBANGUN GRAPH DARI POINT-NODE YANG ADA
+    // MEMBANGUN GRAPH MENGGUNAKAN SPATIAL HASH (skala besar)
     // ---------------------------------------------------------------
     public void BuildConnections()
     {
@@ -23,30 +29,113 @@ public class GraphManager : MonoBehaviour
         foreach (var n in nodes)
             n.neighbors.Clear();
 
-        float maxDistSqr = maxDistance * maxDistance;
+        if (nodes.Count == 0) return;
 
-        // sambungkan node berdekatan (dua arah)
-        for (int i = 0; i < nodes.Count; i++)
+        Stopwatch sw = null;
+        if (logTimings) sw = Stopwatch.StartNew();
+
+        BuildConnectionsSpatialHash(nodes, maxDistance, use2D);
+
+        if (logTimings && sw != null)
         {
-            var a = nodes[i];
-            for (int j = i + 1; j < nodes.Count; j++)
-            {
-                var b = nodes[j];
-                float distSqr = (a.transform.position - b.transform.position).sqrMagnitude;
+            sw.Stop();
+            Debug.Log($"[GraphManager] BuildConnections selesai. Time = {sw.Elapsed.TotalMilliseconds:F2} ms");
+        }
+    }
 
-                if (distSqr <= maxDistSqr)
+    // Grid hash: cellSize = maxDistance, cek hanya sel sekitar
+    private static void BuildConnectionsSpatialHash(List<PointNode> nodes, float cellSize, bool twoD)
+    {
+        int n = nodes.Count;
+        float maxDistSqr = cellSize * cellSize;
+
+        // Precompute posisi & index mapping agar akses cepat
+        var positions = new Vector3[n];
+        var indexOf = new Dictionary<PointNode, int>(n);
+        for (int i = 0; i < n; i++)
+        {
+            positions[i] = nodes[i].transform.position;
+            indexOf[nodes[i]] = i;
+        }
+
+        // Map: cell -> list of indices node pada cell tsb
+        var grid = new Dictionary<Vector3Int, List<int>>(n);
+
+        // Masukkan semua node ke dalam sel grid
+        for (int i = 0; i < n; i++)
+        {
+            var cell = Hash(positions[i], cellSize, twoD);
+            if (!grid.TryGetValue(cell, out var list))
+            {
+                list = new List<int>(8);
+                grid[cell] = list;
+            }
+            list.Add(i);
+        }
+
+        // Precompute offset sel yang perlu dicek
+        var offsets = BuildNeighborOffsets(twoD);
+
+        // Buat edge hanya sekali per pasangan (gunakan id i < j)
+        for (int i = 0; i < n; i++)
+        {
+            var cell = Hash(positions[i], cellSize, twoD);
+            var posA = positions[i];
+
+            foreach (var off in offsets)
+            {
+                var neighborCell = cell + off;
+                if (!grid.TryGetValue(neighborCell, out var list)) continue;
+
+                for (int k = 0; k < list.Count; k++)
                 {
-                    a.neighbors.Add(b);
-                    b.neighbors.Add(a);
+                    int j = list[k];
+                    if (j <= i) continue; // hindari duplikasi dan self
+
+                    var posB = positions[j];
+                    float distSqr = (posA - posB).sqrMagnitude;
+
+                    if (distSqr <= maxDistSqr)
+                    {
+                        nodes[i].neighbors.Add(nodes[j]);
+                        nodes[j].neighbors.Add(nodes[i]);
+                    }
                 }
             }
         }
+    }
 
-        Debug.Log("[GraphManager] BuildConnections selesai.");
+    private static Vector3Int Hash(Vector3 p, float cellSize, bool twoD)
+    {
+        int x = Mathf.FloorToInt(p.x / cellSize);
+        int y = twoD ? 0 : Mathf.FloorToInt(p.y / cellSize);
+        int z = Mathf.FloorToInt(p.z / cellSize);
+        return new Vector3Int(x, y, z);
+    }
+
+    private static List<Vector3Int> BuildNeighborOffsets(bool twoD)
+    {
+        var offsets = new List<Vector3Int>(twoD ? 9 : 27);
+        if (twoD)
+        {
+            // 3x3 di bidang XZ; Y konstan 0
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                    offsets.Add(new Vector3Int(dx, 0, dz));
+        }
+        else
+        {
+            // 3x3x3 di XYZ
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        offsets.Add(new Vector3Int(dx, dy, dz));
+        }
+        return offsets;
     }
 
     // ---------------------------------------------------------------
-    // CARI JALUR TERPENDEK MENGGUNAKAN DIJKSTRA (OPTIMIZED)
+    // CARI JALUR TERPENDEK MENGGUNAKAN DIJKSTRA (heap)
     // ---------------------------------------------------------------
     public void FindShortestPath(PointNode start, List<PointNode> destinations)
     {
@@ -60,10 +149,19 @@ public class GraphManager : MonoBehaviour
         {
             Debug.LogWarning("[GraphManager] Node list kosong — memanggil BuildConnections() ulang.");
             BuildConnections();
+            if (nodes.Count == 0) return;
         }
 
-        // Jalankan Dijkstra sekali untuk semua tujuan
-        var prev = DijkstraAll(start);
+        Stopwatch sw = null;
+        if (logTimings) sw = Stopwatch.StartNew();
+
+        var prev = DijkstraAll_Heap(start);
+
+        if (logTimings && sw != null)
+        {
+            sw.Stop();
+            Debug.Log($"[GraphManager] DijkstraAll selesai. Time = {sw.Elapsed.TotalMilliseconds:F2} ms");
+        }
 
         foreach (var dest in destinations)
         {
@@ -80,56 +178,84 @@ public class GraphManager : MonoBehaviour
         }
     }
 
-    // ---------------------------------------------------------------
-    // DIJKSTRA: SEKALI JALAN UNTUK SEMUA NODE
-    // ---------------------------------------------------------------
-    private Dictionary<PointNode, PointNode> DijkstraAll(PointNode start)
+    // Dijkstra memakai min-heap; bobot edge = jarak kuadrat (tanpa sqrt, cepat)
+    // NOTE: Jika ingin jarak fisik, ganti perhitungan 'alt' menjadi:
+    // float alt = dist[currentIdx] + Vector3.Distance(positions[currentIdx], positions[nIdx]);
+    private Dictionary<PointNode, PointNode> DijkstraAll_Heap(PointNode start)
     {
-        var dist = new Dictionary<PointNode, float>(nodes.Count);
-        var prev = new Dictionary<PointNode, PointNode>(nodes.Count);
-        var visited = new HashSet<PointNode>();
+        int n = nodes.Count;
 
-        foreach (var n in nodes)
-            dist[n] = float.PositiveInfinity;
+        // Mapping index untuk akses cepat
+        var indexOf = new Dictionary<PointNode, int>(n);
+        for (int i = 0; i < n; i++) indexOf[nodes[i]] = i;
 
-        dist[start] = 0f;
-
-        // manual priority queue sederhana
-        var queue = new List<PointNode> { start };
-
-        while (queue.Count > 0)
+        if (!indexOf.TryGetValue(start, out int startIdx))
         {
-            // ambil node dengan jarak terkecil
-            PointNode current = null;
-            float minDist = float.PositiveInfinity;
-            for (int i = 0; i < queue.Count; i++)
+            Debug.LogWarning("[GraphManager] Start node tidak ada di graph.");
+            return new Dictionary<PointNode, PointNode>(0);
+        }
+
+        // Cache posisi agar akses transform tidak berulang
+        var positions = new Vector3[n];
+        for (int i = 0; i < n; i++)
+            positions[i] = nodes[i].transform.position;
+
+        var dist = new float[n];
+        var prevIndex = new int[n];
+        var visited = new bool[n];
+
+        const float INF = float.PositiveInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            dist[i] = INF;
+            prevIndex[i] = -1;
+            visited[i] = false;
+        }
+
+        dist[startIdx] = 0f;
+
+        // Min-heap priority queue
+        var pq = new MinHeap(n);
+        pq.Push(startIdx, 0f);
+
+        while (pq.Count > 0)
+        {
+            var popped = pq.Pop();
+            int currentIdx = popped.index;
+
+            if (visited[currentIdx]) continue; // skip entri usang
+            visited[currentIdx] = true;
+
+            // Relax semua tetangga
+            var currentNode = nodes[currentIdx];
+            var neighbors = currentNode.neighbors;
+
+            for (int k = 0; k < neighbors.Count; k++)
             {
-                var node = queue[i];
-                if (dist[node] < minDist)
+                var neighbor = neighbors[k];
+                int nIdx = indexOf[neighbor];
+                if (visited[nIdx]) continue;
+
+                // Bobot edge = jarak kuadrat antar node
+                float w = (positions[currentIdx] - positions[nIdx]).sqrMagnitude;
+                float alt = dist[currentIdx] + w;
+
+                if (alt < dist[nIdx])
                 {
-                    minDist = dist[node];
-                    current = node;
+                    dist[nIdx] = alt;
+                    prevIndex[nIdx] = currentIdx;
+                    pq.Push(nIdx, alt); // tidak perlu decrease-key; push ulang saja
                 }
             }
-            queue.Remove(current);
-            visited.Add(current);
+        }
 
-            // periksa semua tetangga
-            foreach (var neighbor in current.neighbors)
-            {
-                if (visited.Contains(neighbor)) continue;
-
-                float alt = dist[current] + (current.transform.position - neighbor.transform.position).sqrMagnitude;
-
-                if (alt < dist[neighbor])
-                {
-                    dist[neighbor] = alt;
-                    prev[neighbor] = current;
-
-                    if (!queue.Contains(neighbor))
-                        queue.Add(neighbor);
-                }
-            }
+        // Bangun dictionary prev (PointNode -> PointNode)
+        var prev = new Dictionary<PointNode, PointNode>(n);
+        for (int i = 0; i < n; i++)
+        {
+            int p = prevIndex[i];
+            if (p >= 0)
+                prev[nodes[i]] = nodes[p];
         }
 
         return prev;
@@ -142,36 +268,73 @@ public class GraphManager : MonoBehaviour
     {
         var path = new List<PointNode>();
 
-        if (!prev.ContainsKey(end) && end != start)
+        if (end == null) return path;
+        if (start == end)
+        {
+            path.Add(start);
+            return path;
+        }
+
+        // Jika tidak ada predecessor utk end
+        if (!prev.ContainsKey(end))
             return path; // tidak ada jalur
 
-        for (var node = end; node != null; node = prev.ContainsKey(node) ? prev[node] : null)
+        // Telusuri mundur dari end ke start
+        var node = end;
+        while (node != null)
         {
             path.Insert(0, node);
-            if (node == start)
+            if (node == start) break;
+            if (!prev.TryGetValue(node, out node))
+            {
+                // putus; tidak ada jalur lengkap
+                path.Clear();
                 break;
+            }
         }
 
         return path;
     }
 
     // ---------------------------------------------------------------
-    // GAMBAR GARIS (JALUR)
+    // GAMBAR GARIS (JALUR) - gunakan shared material untuk hindari GC
     // ---------------------------------------------------------------
     private void DrawPath(List<PointNode> path)
     {
-        GameObject lineObj = new GameObject($"Path_{path[0].name}_to_{path[^1].name}");
-        lineObj.transform.SetParent(transform);
+        if (path == null || path.Count == 0) return;
+
+        if (sharedLineMaterial == null)
+        {
+            // Catatan: Pastikan shader tersedia. Untuk URP/HDRP, sesuaikan shader/material.
+            var shader = Shader.Find("Unlit/Color");
+            sharedLineMaterial = new Material(shader) { color = Color.cyan };
+        }
+
+        GameObject lineObj = new GameObject($"Path_{path[0].name}_to_{path[path.Count - 1].name}");
+        lineObj.transform.SetParent(transform, false);
 
         var lr = lineObj.AddComponent<LineRenderer>();
         lr.useWorldSpace = true;
         lr.positionCount = path.Count;
-        lr.material = new Material(Shader.Find("Unlit/Color"));
-        lr.material.color = Color.cyan;
+        lr.material = sharedLineMaterial; // shared, tidak buat material baru
         lr.widthMultiplier = 0.05f;
+        lr.numCornerVertices = 2;
+        lr.numCapVertices = 2;
 
+        // Jika ingin warna per-path tanpa instancing material,
+        // bisa gunakan Gradient color pada LineRenderer:
+        var grad = new Gradient();
+        grad.SetKeys(
+            new GradientColorKey[] { new GradientColorKey(Color.cyan, 0f), new GradientColorKey(Color.cyan, 1f) },
+            new GradientAlphaKey[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) }
+        );
+        lr.colorGradient = grad;
+
+        var positions = new Vector3[path.Count];
         for (int i = 0; i < path.Count; i++)
-            lr.SetPosition(i, path[i].transform.position);
+            positions[i] = path[i].transform.position;
+
+        lr.SetPositions(positions);
     }
 
     // ---------------------------------------------------------------
@@ -179,11 +342,108 @@ public class GraphManager : MonoBehaviour
     // ---------------------------------------------------------------
     public void ClearAllPaths()
     {
+        // Hapus semua anak yang namanya diawali "Path_"
+        var toDelete = new List<GameObject>();
         foreach (Transform child in transform)
         {
             if (child.name.StartsWith("Path_"))
-                Destroy(child.gameObject);
+                toDelete.Add(child.gameObject);
         }
+
+        for (int i = 0; i < toDelete.Count; i++)
+            Destroy(toDelete[i]);
+
         Debug.Log("[GraphManager] Semua garis path dihapus.");
+    }
+
+    // ---------------------------------------------------------------
+    // MIN-HEAP PRIORITY QUEUE (untuk Dijkstra)
+    // ---------------------------------------------------------------
+    // Simpan pasangan (index node, priority)
+    private struct HeapItem
+    {
+        public int index;
+        public float priority;
+        public HeapItem(int idx, float p) { index = idx; priority = p; }
+    }
+
+    private class MinHeap
+    {
+        private readonly List<HeapItem> heap;
+
+        public int Count => heap.Count;
+
+        public MinHeap(int capacity = 0)
+        {
+            heap = capacity > 0 ? new List<HeapItem>(capacity) : new List<HeapItem>();
+        }
+
+        public void Clear() => heap.Clear();
+
+        public void Push(int index, float priority)
+        {
+            heap.Add(new HeapItem(index, priority));
+            SiftUp(heap.Count - 1);
+        }
+
+        public (int index, float priority) Pop()
+        {
+            int last = heap.Count - 1;
+            var root = heap[0];
+
+            heap[0] = heap[last];
+            heap.RemoveAt(last);
+
+            if (heap.Count > 0)
+                SiftDown(0);
+
+            return (root.index, root.priority);
+        }
+
+        private void SiftUp(int i)
+        {
+            while (i > 0)
+            {
+                int parent = (i - 1) >> 1;
+                if (heap[i].priority < heap[parent].priority)
+                {
+                    Swap(i, parent);
+                    i = parent;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
+        private void SiftDown(int i)
+        {
+            int count = heap.Count;
+            while (true)
+            {
+                int left = (i << 1) + 1;
+                int right = left + 1;
+                int smallest = i;
+
+                if (left < count && heap[left].priority < heap[smallest].priority)
+                    smallest = left;
+
+                if (right < count && heap[right].priority < heap[smallest].priority)
+                    smallest = right;
+
+                if (smallest == i) break;
+
+                Swap(i, smallest);
+                i = smallest;
+            }
+        }
+
+        private void Swap(int a, int b)
+        {
+            var tmp = heap[a];
+            heap[a] = heap[b];
+            heap[b] = tmp;
+        }
     }
 }
