@@ -137,46 +137,78 @@ public class GraphManager : MonoBehaviour
     // ---------------------------------------------------------------
     // CARI JALUR TERPENDEK MENGGUNAKAN DIJKSTRA (heap)
     // ---------------------------------------------------------------
-    public void FindShortestPath(PointNode start, List<PointNode> destinations)
+// ---------------------------------------------------------------
+// CARI JALUR TERPENDEK BERANTAI (CHAINED DIJKSTRA)
+// ---------------------------------------------------------------
+public void FindShortestPath(PointNode start, List<PointNode> destinations)
+{
+    if (start == null || destinations == null || destinations.Count == 0)
     {
-        if (start == null || destinations == null || destinations.Count == 0)
-        {
-            Debug.LogWarning("[GraphManager] Start atau destinasi belum dipilih!");
-            return;
-        }
-
-        if (nodes == null || nodes.Count == 0)
-        {
-            Debug.LogWarning("[GraphManager] Node list kosong — memanggil BuildConnections() ulang.");
-            BuildConnections();
-            if (nodes.Count == 0) return;
-        }
-
-        Stopwatch sw = null;
-        if (logTimings) sw = Stopwatch.StartNew();
-
-        var prev = DijkstraAll_Heap(start);
-
-        if (logTimings && sw != null)
-        {
-            sw.Stop();
-            Debug.Log($"[GraphManager] DijkstraAll selesai. Time = {sw.Elapsed.TotalMilliseconds:F2} ms");
-        }
-
-        foreach (var dest in destinations)
-        {
-            var path = ReconstructPath(prev, start, dest);
-            if (path.Count > 1)
-            {
-                DrawPath(path);
-                Debug.Log($"[GraphManager] Jalur ditemukan dari {start.name} ke {dest.name} ({path.Count} titik)");
-            }
-            else
-            {
-                Debug.LogWarning($"[GraphManager] Tidak ada jalur dari {start.name} ke {dest.name}");
-            }
-        }
+        Debug.LogWarning("[GraphManager] Start atau destinasi belum dipilih!");
+        return;
     }
+
+    if (nodes == null || nodes.Count == 0)
+    {
+        Debug.LogWarning("[GraphManager] Node list kosong — memanggil BuildConnections() ulang.");
+        BuildConnections();
+        if (nodes.Count == 0) return;
+    }
+
+    Stopwatch sw = null;
+    if (logTimings) sw = Stopwatch.StartNew();
+
+    // Simpan semua path yang berhasil ditemukan
+    List<PointNode> totalPath = new List<PointNode>();
+    PointNode currentStart = start;
+
+    for (int i = 0; i < destinations.Count; i++)
+    {
+        PointNode currentDest = destinations[i];
+        Debug.Log($"[GraphManager] Mencari jalur dari {currentStart.name} ke {currentDest.name}...");
+
+        var prev = DijkstraAll_Heap(currentStart);
+        var subPath = ReconstructPath(prev, currentStart, currentDest);
+
+        if (subPath.Count > 1)
+        {
+            // Gabungkan ke path total
+            if (totalPath.Count > 0)
+            {
+                // Hindari duplikasi titik penghubung (start = end sebelumnya)
+                subPath.RemoveAt(0);
+            }
+            totalPath.AddRange(subPath);
+
+            // Gambar path kecilnya untuk debugging
+            DrawPath(subPath);
+
+            Debug.Log($"[GraphManager] Jalur ditemukan dari {currentStart.name} ke {currentDest.name} ({subPath.Count} titik)");
+        }
+        else
+        {
+            Debug.LogWarning($"[GraphManager] Tidak ada jalur dari {currentStart.name} ke {currentDest.name}");
+            break;
+        }
+
+        // Update titik awal berikutnya
+        currentStart = currentDest;
+    }
+
+    if (logTimings && sw != null)
+    {
+        sw.Stop();
+        Debug.Log($"[GraphManager] Chained Dijkstra selesai. Total waktu = {sw.Elapsed.TotalMilliseconds:F2} ms");
+    }
+
+    // Gambar path total gabungan (opsional)
+    if (totalPath.Count > 1)
+    {
+        DrawPath(totalPath);
+        Debug.Log($"[GraphManager] Total jalur berantai ({totalPath.Count} titik) digambar.");
+    }
+}
+
 
     // Dijkstra memakai min-heap; bobot edge = jarak kuadrat (tanpa sqrt, cepat)
     // NOTE: Jika ingin jarak fisik, ganti perhitungan 'alt' menjadi:
