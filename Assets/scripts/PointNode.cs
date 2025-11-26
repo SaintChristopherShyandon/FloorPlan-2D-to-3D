@@ -10,51 +10,77 @@ public class PointNode : MonoBehaviour
     public bool isStart = false;
     public bool isDestination = false;
 
-    // Komponen Visual (disimpan agar bisa dihapus nanti)
+    // GLOBAL STATIC (tanpa PointSelector)
+    public static PointNode currentStart = null;
+    public static PointNode currentDestination = null;
+
+    // Komponen visual
     private Renderer rend;
     private MeshFilter meshFilter;
 
-    // --- FUNGSI UTAMA YANG DIPANGGIL CLICK MANAGER ---
-    public void TogglePoint()
+    private void Awake()
     {
-        // Cek apakah visual sudah ada?
-        if (rend == null)
+        // Collider wajib ada untuk SphereCast
+        if (!TryGetComponent(out Collider col))
         {
+            SphereCollider sc = gameObject.AddComponent<SphereCollider>();
+            sc.radius = 0.15f;
+        }
+    }
+
+    // Called by ClickManager
+    public void OnClicked()
+    {
+        // === 1. Atur START ===
+        if (currentStart == null)
+        {
+            currentStart = this;
+            SetAsStart();
             ShowVisuals();
+            return;
         }
-        else
+
+        // === 2. Atur DESTINATION ===
+        if (currentStart != null && currentDestination == null && this != currentStart)
         {
-            HideVisuals();
+            currentDestination = this;
+            SetAsDestination();
+            ShowVisuals();
+            return;
         }
+
+        // === 3. Kalau start & destination sudah ada → hanya toggle visual ===
+        ToggleVisual();
+    }
+
+    private void ToggleVisual()
+    {
+        if (rend == null)
+            ShowVisuals();
+        else
+            HideVisuals();
     }
 
     private void ShowVisuals()
     {
-        // 1. Tambahkan MeshFilter (Bentuk Bola)
-        if (meshFilter == null) 
+        if (meshFilter == null)
             meshFilter = gameObject.AddComponent<MeshFilter>();
-        
-        meshFilter.sharedMesh = GameObject.CreatePrimitive(PrimitiveType.Sphere).GetComponent<MeshFilter>().sharedMesh;
 
-        // 2. Tambahkan Renderer (Warna)
-        if (rend == null) 
+        meshFilter.sharedMesh = Resources.GetBuiltinResource<Mesh>("Sphere.fbx");
+
+        if (rend == null)
             rend = gameObject.AddComponent<MeshRenderer>();
 
-        // 3. Update warna sesuai status (Start/End/Normal)
         UpdateColor();
     }
 
     private void HideVisuals()
     {
-        // Hapus komponen visual agar kembali invisible
         if (meshFilter != null) Destroy(meshFilter);
         if (rend != null) Destroy(rend);
 
         meshFilter = null;
         rend = null;
-        
-        // Reset status jika di-hide (Opsional, tergantung kebutuhanmu)
-        // ResetSelection(); 
     }
 
     public void SetAsStart()
@@ -80,39 +106,24 @@ public class PointNode : MonoBehaviour
 
     private void UpdateColor()
     {
-        // Jika belum ada renderer (sedang invisible), tidak perlu ubah warna
         if (rend == null) return;
 
         if (isStart)
-        {
             rend.material.color = Color.green;
-        }
         else if (isDestination)
-        {
             rend.material.color = Color.red;
-        }
         else
         {
-            // Warna Default berdasarkan Parent (Wall/Floor/Roof)
             string parentName = transform.parent != null ? transform.parent.name.ToLower() : "";
-
             if (parentName.Contains("roof") || parentName.Contains("floor"))
-            {
                 rend.material.color = Color.yellow;
-            }
             else if (parentName.Contains("wall"))
-            {
-                // Bisa ubah jadi merah atau putih sesuai selera
-                rend.material.color = Color.red; 
-            }
+                rend.material.color = Color.red;
             else
-            {
                 rend.material.color = Color.white;
-            }
         }
     }
 
-    // Visualisasi garis koneksi di Scene View (Editor Only)
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.cyan;
