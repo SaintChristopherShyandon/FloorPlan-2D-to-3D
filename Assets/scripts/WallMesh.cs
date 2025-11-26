@@ -96,7 +96,7 @@ private void AddWallPoints(GameObject wall)
                 Vector3 worldPos = rot * localPos + center;
 
                 GameObject go = new GameObject("point");
-                
+                go.layer = LayerMask.NameToLayer("Point");
                 // 1. Set Parent dulu
                 go.transform.SetParent(wall.transform, false); 
                 go.transform.position = worldPos;

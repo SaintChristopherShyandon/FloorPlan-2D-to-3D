@@ -273,7 +273,7 @@ public class Builder : MonoBehaviour
                     go.transform.localScale = Vector3.one * 0.05f;
                     go.transform.parent = plane.transform;
                     go.tag = "point";
-
+                    go.layer = LayerMask.NameToLayer("Point");
                     SphereCollider col = go.AddComponent<SphereCollider>();
                     col.isTrigger = true;
                     col.radius = 0.5f;

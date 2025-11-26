@@ -4,10 +4,16 @@ using UnityEngine.Rendering; // untuk BlendMode, RenderQueue
 
 public class ShortestPathController : MonoBehaviour
 {
-    [Header("Pathfinding")]
+    [Header("References")]
     public GraphManager graphManager;
-    private PointNode startNode = null;
-    private List<PointNode> destinationNodes = new List<PointNode>();
+
+    [Header("Selection Logic")]
+    public PointNode startNode = null;
+    public List<PointNode> destinationNodes = new List<PointNode>();
+
+    [Header("Raycast Settings")]
+    public float clickRadius = 0.4f; // Radius SphereCast agar mudah klik dalam tembok
+    public LayerMask pointLayer; // PENTING: Set ini di Inspector ke layer "Point"
 
     [Header("Transparency Controls")]
     [Tooltip("Tags yang dianggap target transparansi")]
@@ -26,32 +32,53 @@ public class ShortestPathController : MonoBehaviour
 
     void Update()
     {
+        // Logika Klik
         if (Input.GetMouseButtonDown(0))
         {
-            Ray ray = Camera.main != null
-                ? Camera.main.ScreenPointToRay(Input.mousePosition)
-                : new Ray(Vector3.zero, Vector3.forward);
+            HandleInput();
+        }
+    }
 
-            if (Physics.Raycast(ray, out RaycastHit hit))
+    void HandleInput()
+    {
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        RaycastHit hit;
+
+        // Gunakan SphereCast agar lebih mudah mengenai point kecil
+        // Gunakan LayerMask agar tidak terhalang Tembok (Wall)
+        if (Physics.SphereCast(ray, clickRadius, out hit, 1000f, pointLayer))
+        {
+            PointNode node = hit.collider.GetComponent<PointNode>();
+            if (node == null) node = hit.collider.GetComponentInParent<PointNode>();
+
+            if (node != null)
             {
-                PointNode node = hit.collider.GetComponent<PointNode>();
-                if (node != null)
-                    HandleClick(node);
+                SelectNode(node);
             }
         }
     }
 
-    void HandleClick(PointNode node)
+    void SelectNode(PointNode node)
     {
+        // Logika 1: Set Start
         if (startNode == null)
         {
             startNode = node;
-            node.SetAsStart();
+            node.SetVisualState(true, false);
+            Debug.Log($"Start Node set: {node.name}");
         }
-        else if (!destinationNodes.Contains(node) && node != startNode)
+        // Logika 2: Set Destination (bisa banyak)
+        else if (node != startNode && !destinationNodes.Contains(node))
         {
             destinationNodes.Add(node);
-            node.SetAsDestination();
+            node.SetVisualState(false, true);
+            Debug.Log($"Destination Node added: {node.name}");
+        }
+        // Logika 3: Deselect (Opsional, klik ulang start untuk reset start)
+        else if (node == startNode)
+        {
+            startNode = null;
+            node.ResetNode();
         }
     }
 
@@ -59,31 +86,40 @@ public class ShortestPathController : MonoBehaviour
     {
         if (startNode == null || destinationNodes.Count == 0)
         {
-            Debug.LogWarning("Start atau tujuan belum dipilih!");
+            Debug.LogWarning("Start atau Destination belum dipilih! Klik node terlebih dahulu.");
             return;
         }
 
-        graphManager.BuildConnections(); // rebuild agar koneksi selalu up-to-date
+        Debug.Log("Mencari jalur...");
+        graphManager.BuildConnections(); // Rebuild graph
         graphManager.FindShortestPath(startNode, destinationNodes);
     }
 
+    // === PERBAIKAN: HANYA ADA SATU FUNGSI RESET ===
     public void OnClickReset()
     {
+        // 1. Hapus Garis Jalur
         graphManager.ClearAllPaths();
 
-        foreach (var node in FindObjectsOfType<PointNode>())
-            node.ResetSelection();
-
+        // 2. Reset Visual Start Node
+        if (startNode != null) startNode.ResetNode();
         startNode = null;
+
+        // 3. Reset Visual Destination Nodes
+        foreach (var dest in destinationNodes)
+        {
+            if (dest != null) dest.ResetNode();
+        }
         destinationNodes.Clear();
 
-        // Kembalikan semua material yang dibuat transparan
+        // 4. Kembalikan Transparansi Tembok (jika ada yang transparan)
         RestoreAllTransparency();
+
+        Debug.Log("Reset Selesai (Path & Transparency).");
     }
 
     // -------------------------------------------------
-    // BUTTON: Jadikan semua Wall/Roof/Floor transparan 65%
-    // Hubungkan method ini ke UI Button OnClick
+    // LOGIKA TRANSPARANSI (Tidak berubah)
     // -------------------------------------------------
     public void OnClickMakeAllTransparent()
     {
@@ -93,7 +129,6 @@ public class ShortestPathController : MonoBehaviour
 
     private void MakeAllTargetsTransparent(float alpha)
     {
-        // Ambil semua renderer di scene (aktif/non-aktif) lalu filter target
         var allRenderers = FindObjectsOfType<Renderer>(true);
         int count = 0;
 
@@ -102,7 +137,6 @@ public class ShortestPathController : MonoBehaviour
             var r = allRenderers[i];
             if (r == null) continue;
 
-            // Periksa tag pada object atau parent; atau fallback per nama
             if (IsTransparencyTarget(r.transform))
             {
                 MakeRendererTransparent(r, alpha);
@@ -111,12 +145,11 @@ public class ShortestPathController : MonoBehaviour
         }
 
         if (count == 0)
-            Debug.LogWarning("Tidak ditemukan renderer bertag/nama Wall/Roof/Floor. Pastikan Tag atau nama objek sesuai.");
+            Debug.LogWarning("Tidak ditemukan renderer bertag/nama Wall/Roof/Floor.");
     }
 
     private bool IsTransparencyTarget(Transform t)
     {
-        // Cek tag pada transform dan semua parent
         var cur = t;
         while (cur != null)
         {
@@ -129,7 +162,6 @@ public class ShortestPathController : MonoBehaviour
 
         if (!useNameFallback) return false;
 
-        // Fallback: cek nama transform dan parent (case-insensitive)
         cur = t;
         while (cur != null)
         {
@@ -142,27 +174,21 @@ public class ShortestPathController : MonoBehaviour
         return false;
     }
 
-    // --------------------------
-    // Material helpers
-    // --------------------------
     private void MakeRendererTransparent(Renderer r, float alpha)
     {
         if (r == null) return;
 
-        // Simpan shared materials asli (sekali saja)
         if (!originalSharedMats.ContainsKey(r))
         {
-            originalSharedMats[r] = r.sharedMaterials; // referensi, tidak instansiasi
+            originalSharedMats[r] = r.sharedMaterials;
         }
 
-        // Jika sudah pernah dibuat instanced transparent, pakai cache
         if (transparentInstancedMats.TryGetValue(r, out var cached))
         {
             r.materials = cached;
             return;
         }
 
-        // Buat instanced materials dari shared, lalu set ke transparent
         var shared = r.sharedMaterials;
         var instanced = new Material[shared.Length];
 
@@ -197,8 +223,7 @@ public class ShortestPathController : MonoBehaviour
         {
             for (int i = 0; i < instanced.Length; i++)
             {
-                if (instanced[i] != null)
-                    Destroy(instanced[i]);
+                if (instanced[i] != null) Destroy(instanced[i]);
             }
             transparentInstancedMats.Remove(r);
         }
@@ -214,19 +239,17 @@ public class ShortestPathController : MonoBehaviour
         transparentInstancedMats.Clear();
     }
 
-    // Standard/URP transparent setup
     private void SetMaterialTransparent(Material mat, float alpha)
     {
         if (mat == null) return;
 
-        // Set warna dengan alpha
         if (mat.HasProperty("_Color"))
         {
             Color c = mat.color;
             c.a = alpha;
             mat.color = c;
         }
-        else if (mat.HasProperty("_BaseColor")) // URP/HDRP
+        else if (mat.HasProperty("_BaseColor"))
         {
             Color c = mat.GetColor("_BaseColor");
             c.a = alpha;
@@ -237,36 +260,27 @@ public class ShortestPathController : MonoBehaviour
 
         if (shaderName.Contains("Universal Render Pipeline"))
         {
-            // URP Lit
-            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f); // 0=Opaque, 1=Transparent
+            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1f);
             mat.SetOverrideTag("RenderType", "Transparent");
-
             mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
             mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-            if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f); // Alpha (opsional)
-
+            if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0f);
             mat.SetInt("_ZWrite", 0);
-
             mat.DisableKeyword("_ALPHATEST_ON");
             mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             mat.EnableKeyword("_ALPHABLEND_ON");
-
             mat.renderQueue = (int)RenderQueue.Transparent;
         }
         else
         {
-            // Built-in Standard
-            if (mat.HasProperty("_Mode")) mat.SetFloat("_Mode", 3f); // 3 = Transparent
+            if (mat.HasProperty("_Mode")) mat.SetFloat("_Mode", 3f);
             mat.SetOverrideTag("RenderType", "Transparent");
-
             mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
             mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
             mat.SetInt("_ZWrite", 0);
-
             mat.DisableKeyword("_ALPHATEST_ON");
             mat.EnableKeyword("_ALPHABLEND_ON");
             mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-
             mat.renderQueue = (int)RenderQueue.Transparent;
         }
     }

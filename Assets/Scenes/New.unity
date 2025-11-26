@@ -18623,6 +18623,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   graphManager: {fileID: 1798182982}
+  startNode: {fileID: 0}
+  destinationNodes: []
+  clickRadius: 0.4
+  pointLayer:
+    serializedVersion: 2
+    m_Bits: 8
   targetTags:
   - Wall
   - Roof
@@ -20515,9 +20521,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   clickRadius: 0.25
-  pointLayer:
-    serializedVersion: 2
-    m_Bits: 4294967295
 --- !u!4 &1197877600
 Transform:
   m_ObjectHideFlags: 0

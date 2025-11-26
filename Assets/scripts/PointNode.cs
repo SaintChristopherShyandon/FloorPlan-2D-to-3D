@@ -6,131 +6,68 @@ public class PointNode : MonoBehaviour
     [Header("Connections")]
     public List<PointNode> neighbors = new List<PointNode>();
 
-    [Header("State")]
-    public bool isStart = false;
-    public bool isDestination = false;
+    // HAPUS STATIC VARIABLES. Biarkan Controller yang mengaturnya.
+    // Variabel state hanya untuk visualisasi diri sendiri
+    private bool _isStart = false;
+    private bool _isDestination = false;
 
-    // GLOBAL STATIC (tanpa PointSelector)
-    public static PointNode currentStart = null;
-    public static PointNode currentDestination = null;
-
-    // Komponen visual
     private Renderer rend;
     private MeshFilter meshFilter;
+    private Color originalColor = Color.white; // Simpan warna asli
 
     private void Awake()
     {
-        // Collider wajib ada untuk SphereCast
+        // Pastikan ada collider
         if (!TryGetComponent(out Collider col))
         {
             SphereCollider sc = gameObject.AddComponent<SphereCollider>();
-            sc.radius = 0.15f;
+            sc.radius = 0.5f; // Radius diperbesar agar mudah diklik
+            sc.isTrigger = true;
         }
+        
+        // Setup referensi renderer jika sudah ada visual
+        // (Visual sphere biasanya dibuat runtime, jadi kita handle nanti)
     }
 
-    // Called by ClickManager
-    public void OnClicked()
+    // Fungsi visualisasi dipanggil oleh Controller
+    public void SetVisualState(bool isStart, bool isDestination)
     {
-        // === 1. Atur START ===
-        if (currentStart == null)
-        {
-            currentStart = this;
-            SetAsStart();
-            ShowVisuals();
-            return;
-        }
+        _isStart = isStart;
+        _isDestination = isDestination;
 
-        // === 2. Atur DESTINATION ===
-        if (currentStart != null && currentDestination == null && this != currentStart)
-        {
-            currentDestination = this;
-            SetAsDestination();
-            ShowVisuals();
-            return;
-        }
+        // Pastikan visual sphere ada
+        if (rend == null) CreateVisuals();
 
-        // === 3. Kalau start & destination sudah ada → hanya toggle visual ===
-        ToggleVisual();
-    }
-
-    private void ToggleVisual()
-    {
-        if (rend == null)
-            ShowVisuals();
-        else
-            HideVisuals();
-    }
-
-    private void ShowVisuals()
-    {
-        if (meshFilter == null)
-            meshFilter = gameObject.AddComponent<MeshFilter>();
-
-        meshFilter.sharedMesh = Resources.GetBuiltinResource<Mesh>("Sphere.fbx");
-
-        if (rend == null)
-            rend = gameObject.AddComponent<MeshRenderer>();
-
-        UpdateColor();
-    }
-
-    private void HideVisuals()
-    {
-        if (meshFilter != null) Destroy(meshFilter);
-        if (rend != null) Destroy(rend);
-
-        meshFilter = null;
-        rend = null;
-    }
-
-    public void SetAsStart()
-    {
-        isStart = true;
-        isDestination = false;
-        UpdateColor();
-    }
-
-    public void SetAsDestination()
-    {
-        isDestination = true;
-        isStart = false;
-        UpdateColor();
-    }
-
-    public void ResetSelection()
-    {
-        isStart = false;
-        isDestination = false;
-        UpdateColor();
-    }
-
-    private void UpdateColor()
-    {
-        if (rend == null) return;
-
-        if (isStart)
+        if (_isStart)
             rend.material.color = Color.green;
-        else if (isDestination)
+        else if (_isDestination)
             rend.material.color = Color.red;
         else
-        {
-            string parentName = transform.parent != null ? transform.parent.name.ToLower() : "";
-            if (parentName.Contains("roof") || parentName.Contains("floor"))
-                rend.material.color = Color.yellow;
-            else if (parentName.Contains("wall"))
-                rend.material.color = Color.red;
-            else
-                rend.material.color = Color.white;
-        }
+            rend.material.color = originalColor; // Kembali ke warna tipe (kuning/merah/putih)
     }
 
-    private void OnDrawGizmosSelected()
+    public void ResetNode()
     {
-        Gizmos.color = Color.cyan;
-        foreach (var n in neighbors)
-        {
-            if (n != null)
-                Gizmos.DrawLine(transform.position, n.transform.position);
-        }
+        SetVisualState(false, false);
+        // Opsi: Jika ingin menyembunyikan sphere saat tidak dipilih, panggil HideVisuals() di sini
+    }
+
+    private void CreateVisuals()
+    {
+        if (meshFilter == null) meshFilter = gameObject.AddComponent<MeshFilter>();
+        meshFilter.sharedMesh = Resources.GetBuiltinResource<Mesh>("Sphere.fbx");
+
+        if (rend == null) rend = gameObject.AddComponent<MeshRenderer>();
+        
+        // Tentukan warna dasar berdasarkan parent (Wall/Floor)
+        string parentName = transform.parent != null ? transform.parent.name.ToLower() : "";
+        if (parentName.Contains("roof") || parentName.Contains("floor"))
+            originalColor = Color.yellow;
+        else if (parentName.Contains("wall"))
+            originalColor = Color.red; // Wall points
+        else
+            originalColor = Color.white;
+            
+        rend.material.color = originalColor;
     }
 }
