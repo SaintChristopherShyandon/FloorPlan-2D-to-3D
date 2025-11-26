@@ -13218,7 +13218,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 10
+  far clip plane: 7.5
   field of view: 50
   orthographic: 0
   orthographic size: 5
@@ -20485,6 +20485,54 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1191547789}
   m_CullTransparentMesh: 0
+--- !u!1 &1197877598
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1197877600}
+  - component: {fileID: 1197877599}
+  m_Layer: 0
+  m_Name: GameManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1197877599
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1197877598}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a70f13e2cde444e49a4f140ad0aba32d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickRadius: 0.25
+  pointLayer:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!4 &1197877600
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1197877598}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 15.718311, y: 1.2375001, z: 14.221481}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1213216941
 GameObject:
   m_ObjectHideFlags: 0
@@ -32521,9 +32569,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Generate Building
+  m_text: Start
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b439caa7ddc684c46a417bf4d4c1bf36, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: c9adb1f542a93ae489bacfeae21e8394, type: 2}
   m_sharedMaterial: {fileID: 8034722228088867983, guid: b439caa7ddc684c46a417bf4d4c1bf36,
     type: 2}
   m_fontSharedMaterials: []
@@ -32591,7 +32639,7 @@ MonoBehaviour:
   m_margin: {x: 0, y: 0, z: 37.5672, w: 0.47158813}
   m_isUsingLegacyAnimationComponent: 0
   m_isVolumetricText: 0
-  m_hasFontAssetChanged: 0
+  m_hasFontAssetChanged: 1
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
 --- !u!222 &1853574500
@@ -37222,3 +37270,4 @@ SceneRoots:
   - {fileID: 562343702}
   - {fileID: 1798182984}
   - {fileID: 1052265603}
+  - {fileID: 1197877600}

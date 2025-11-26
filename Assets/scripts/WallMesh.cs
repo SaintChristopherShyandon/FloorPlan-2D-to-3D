@@ -73,12 +73,14 @@ private void AddWallPoints(GameObject wall)
     Quaternion rot = wall.transform.rotation;
 
     float spacing = 0.15f;
+    // Gunakan Math.Max agar minimal ada 1 baris titik walaupun tembok kecil
     int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
     int numY = Mathf.Max(1, Mathf.FloorToInt(scale.y / spacing));
+    
     float halfZ = scale.z / 2f;
-    float offsetOut = 0.02f;
+    float offsetOut = 0.02f; // Sedikit keluar dari tembok agar tidak tenggelam
 
-    // sama persis pola dengan floor: ±normalAxis ± offsetOut
+    // Pola: Depan dan Belakang tembok
     float[] sides = { halfZ + offsetOut, -halfZ - offsetOut };
 
     foreach (float sideZ in sides)
@@ -94,14 +96,34 @@ private void AddWallPoints(GameObject wall)
                 Vector3 worldPos = rot * localPos + center;
 
                 GameObject go = new GameObject("point");
-                go.transform.SetParent(wall.transform, false);
+                
+                // 1. Set Parent dulu
+                go.transform.SetParent(wall.transform, false); 
                 go.transform.position = worldPos;
-                go.transform.localScale = Vector3.one * 0.05f;
+
+                // 2. PERBAIKAN BENTUK (Agar tidak gepeng)
+                // Kita ambil skala asli (LossyScale) dari Wall
+                Vector3 parentGlobalScale = wall.transform.lossyScale;
+                float desiredSize = 0.05f; // Ukuran bulat yang kamu mau
+
+                // Rumus: Ukuran Target / Ukuran Parent
+                // Ini akan memaksa point tetap bulat 0.05f walau temboknya gepeng
+                go.transform.localScale = new Vector3(
+                    desiredSize / parentGlobalScale.x,
+                    desiredSize / parentGlobalScale.y,
+                    desiredSize / parentGlobalScale.z
+                );
+
                 go.tag = "point";
 
+                // 3. Collider
                 SphereCollider col = go.AddComponent<SphereCollider>();
                 col.isTrigger = true;
-                col.radius = 0.2f;
+                
+                // Samakan radius ini dengan yang ada di Floor/Roof (disana kamu pakai 0.5f)
+                // Tapi ingat, radius ini relatif terhadap localScale point. 
+                // Jika visual point kecil, radius 0.5f mungkin cukup besar (jangkauan luas).
+                col.radius = 0.5f; 
 
                 Rigidbody rb = go.AddComponent<Rigidbody>();
                 rb.isKinematic = true;
