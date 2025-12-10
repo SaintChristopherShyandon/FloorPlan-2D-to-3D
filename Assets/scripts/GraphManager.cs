@@ -1,26 +1,31 @@
 using UnityEngine;
 using System.Collections.Generic;
-using System.Diagnostics; // untuk Stopwatch
+using System.Diagnostics; 
 using Debug = UnityEngine.Debug;
 
 public class GraphManager : MonoBehaviour
 {
     [Header("Graph")]
-    public float maxDistance = 2.0f; // jarak maksimum antar node yang dianggap terhubung
-    public bool use2D = false;       // jika true, hash grid abaikan sumbu Y (cocok untuk game 2D/topdown)
+    public float maxDistance = 2.0f;
+    public bool use2D = false;
     public bool logTimings = true;
 
     private List<PointNode> nodes = new List<PointNode>();
-    private static Material sharedLineMaterial; // hindari alokasi material per path
+    private static Material sharedLineMaterial;
+
+    // >>> DITAMBAHKAN
+    [Header("Distance Result")]
+    public float lastTotalDistance = 0f;              // total meter
+    public List<PointNode> lastPath = new List<PointNode>(); // path final
 
     void Start()
     {
-        BuildConnections(); // bisa dipanggil ulang saat layout node berubah
+        BuildConnections();
     }
 
-    // ---------------------------------------------------------------
-    // MEMBANGUN GRAPH MENGGUNAKAN SPATIAL HASH (skala besar)
-    // ---------------------------------------------------------------
+    // ===========================================================
+    // BUILD CONNECTIONS
+    // ===========================================================
     public void BuildConnections()
     {
         nodes = new List<PointNode>(FindObjectsOfType<PointNode>());
@@ -43,25 +48,22 @@ public class GraphManager : MonoBehaviour
         }
     }
 
-    // Grid hash: cellSize = maxDistance, cek hanya sel sekitar
     private static void BuildConnectionsSpatialHash(List<PointNode> nodes, float cellSize, bool twoD)
     {
         int n = nodes.Count;
         float maxDistSqr = cellSize * cellSize;
 
-        // Precompute posisi & index mapping agar akses cepat
         var positions = new Vector3[n];
         var indexOf = new Dictionary<PointNode, int>(n);
+
         for (int i = 0; i < n; i++)
         {
             positions[i] = nodes[i].transform.position;
             indexOf[nodes[i]] = i;
         }
 
-        // Map: cell -> list of indices node pada cell tsb
         var grid = new Dictionary<Vector3Int, List<int>>(n);
 
-        // Masukkan semua node ke dalam sel grid
         for (int i = 0; i < n; i++)
         {
             var cell = Hash(positions[i], cellSize, twoD);
@@ -73,10 +75,8 @@ public class GraphManager : MonoBehaviour
             list.Add(i);
         }
 
-        // Precompute offset sel yang perlu dicek
         var offsets = BuildNeighborOffsets(twoD);
 
-        // Buat edge hanya sekali per pasangan (gunakan id i < j)
         for (int i = 0; i < n; i++)
         {
             var cell = Hash(positions[i], cellSize, twoD);
@@ -90,7 +90,7 @@ public class GraphManager : MonoBehaviour
                 for (int k = 0; k < list.Count; k++)
                 {
                     int j = list[k];
-                    if (j <= i) continue; // hindari duplikasi dan self
+                    if (j <= i) continue;
 
                     var posB = positions[j];
                     float distSqr = (posA - posB).sqrMagnitude;
@@ -118,14 +118,12 @@ public class GraphManager : MonoBehaviour
         var offsets = new List<Vector3Int>(twoD ? 9 : 27);
         if (twoD)
         {
-            // 3x3 di bidang XZ; Y konstan 0
             for (int dz = -1; dz <= 1; dz++)
                 for (int dx = -1; dx <= 1; dx++)
                     offsets.Add(new Vector3Int(dx, 0, dz));
         }
         else
         {
-            // 3x3x3 di XYZ
             for (int dz = -1; dz <= 1; dz++)
                 for (int dy = -1; dy <= 1; dy++)
                     for (int dx = -1; dx <= 1; dx++)
@@ -134,100 +132,101 @@ public class GraphManager : MonoBehaviour
         return offsets;
     }
 
-    // ---------------------------------------------------------------
-    // CARI JALUR TERPENDEK MENGGUNAKAN DIJKSTRA (heap)
-    // ---------------------------------------------------------------
-// ---------------------------------------------------------------
-// CARI JALUR TERPENDEK BERANTAI (CHAINED DIJKSTRA)
-// ---------------------------------------------------------------
-public void FindShortestPath(PointNode start, List<PointNode> destinations)
-{
-    if (start == null || destinations == null || destinations.Count == 0)
+    // ===========================================================
+    // CHAINED DIJKSTRA (with distance)
+    // ===========================================================
+    public void FindShortestPath(PointNode start, List<PointNode> destinations)
     {
-        Debug.LogWarning("[GraphManager] Start atau destinasi belum dipilih!");
-        return;
-    }
-
-    if (nodes == null || nodes.Count == 0)
-    {
-        Debug.LogWarning("[GraphManager] Node list kosong — memanggil BuildConnections() ulang.");
-        BuildConnections();
-        if (nodes.Count == 0) return;
-    }
-
-    Stopwatch sw = null;
-    if (logTimings) sw = Stopwatch.StartNew();
-
-    // Simpan semua path yang berhasil ditemukan
-    List<PointNode> totalPath = new List<PointNode>();
-    PointNode currentStart = start;
-
-    for (int i = 0; i < destinations.Count; i++)
-    {
-        PointNode currentDest = destinations[i];
-        Debug.Log($"[GraphManager] Mencari jalur dari {currentStart.name} ke {currentDest.name}...");
-
-        var prev = DijkstraAll_Heap(currentStart);
-        var subPath = ReconstructPath(prev, currentStart, currentDest);
-
-        if (subPath.Count > 1)
+        if (start == null || destinations == null || destinations.Count == 0)
         {
-            // Gabungkan ke path total
-            if (totalPath.Count > 0)
+            Debug.LogWarning("[GraphManager] Start atau destinasi belum dipilih!");
+            return;
+        }
+
+        if (nodes == null || nodes.Count == 0)
+        {
+            BuildConnections();
+            if (nodes.Count == 0) return;
+        }
+
+        Stopwatch sw = null;
+        if (logTimings) sw = Stopwatch.StartNew();
+
+        List<PointNode> totalPath = new List<PointNode>();
+        float totalDistance = 0f; // >>> DITAMBAHKAN
+        PointNode currentStart = start;
+
+        for (int i = 0; i < destinations.Count; i++)
+        {
+            PointNode currentDest = destinations[i];
+
+            var prev = DijkstraAll_Heap(currentStart);
+            var subPath = ReconstructPath(prev, currentStart, currentDest);
+
+            if (subPath.Count > 1)
             {
-                // Hindari duplikasi titik penghubung (start = end sebelumnya)
-                subPath.RemoveAt(0);
+                // Hitung jarak fisik subpath
+                float segmentDistance = CalculatePathDistance(subPath); // >>> DITAMBAHKAN
+                totalDistance += segmentDistance;
+
+                if (totalPath.Count > 0)
+                    subPath.RemoveAt(0);
+
+                totalPath.AddRange(subPath);
             }
-            totalPath.AddRange(subPath);
+            else
+            {
+                Debug.LogWarning($"Tidak ada jalur dari {currentStart.name} ke {currentDest.name}");
+                break;
+            }
 
-            // Gambar path kecilnya untuk debugging
-            DrawPath(subPath);
-
-            Debug.Log($"[GraphManager] Jalur ditemukan dari {currentStart.name} ke {currentDest.name} ({subPath.Count} titik)");
+            currentStart = currentDest;
         }
-        else
+
+        if (logTimings && sw != null)
         {
-            Debug.LogWarning($"[GraphManager] Tidak ada jalur dari {currentStart.name} ke {currentDest.name}");
-            break;
+            sw.Stop();
+            Debug.Log($"[GraphManager] Chained Dijkstra selesai ({sw.Elapsed.TotalMilliseconds:F2} ms)");
         }
 
-        // Update titik awal berikutnya
-        currentStart = currentDest;
+        if (totalPath.Count > 1)
+            DrawPath(totalPath);
+
+        // Simpan untuk UI
+        lastTotalDistance = totalDistance; // >>> DITAMBAHKAN
+        lastPath = totalPath;             // >>> DITAMBAHKAN
+
+        Debug.Log($"[GraphManager] Total jarak = {totalDistance:F2} meter");
     }
 
-    if (logTimings && sw != null)
+    // ===========================================================
+    // HITUNG JARAK FISIK (METER)
+    // ===========================================================
+    private float CalculatePathDistance(List<PointNode> path)
     {
-        sw.Stop();
-        Debug.Log($"[GraphManager] Chained Dijkstra selesai. Total waktu = {sw.Elapsed.TotalMilliseconds:F2} ms");
+        float d = 0f;
+
+        for (int i = 0; i < path.Count - 1; i++)
+        {
+            d += Vector3.Distance(path[i].transform.position, path[i + 1].transform.position);
+        }
+
+        return d;
     }
 
-    // Gambar path total gabungan (opsional)
-    if (totalPath.Count > 1)
-    {
-        DrawPath(totalPath);
-        Debug.Log($"[GraphManager] Total jalur berantai ({totalPath.Count} titik) digambar.");
-    }
-}
-
-
-    // Dijkstra memakai min-heap; bobot edge = jarak kuadrat (tanpa sqrt, cepat)
-    // NOTE: Jika ingin jarak fisik, ganti perhitungan 'alt' menjadi:
-    // float alt = dist[currentIdx] + Vector3.Distance(positions[currentIdx], positions[nIdx]);
+    // ===========================================================
+    // DIJKSTRA (HEAP)
+    // ===========================================================
     private Dictionary<PointNode, PointNode> DijkstraAll_Heap(PointNode start)
     {
         int n = nodes.Count;
 
-        // Mapping index untuk akses cepat
         var indexOf = new Dictionary<PointNode, int>(n);
         for (int i = 0; i < n; i++) indexOf[nodes[i]] = i;
 
         if (!indexOf.TryGetValue(start, out int startIdx))
-        {
-            Debug.LogWarning("[GraphManager] Start node tidak ada di graph.");
-            return new Dictionary<PointNode, PointNode>(0);
-        }
+            return new Dictionary<PointNode, PointNode>();
 
-        // Cache posisi agar akses transform tidak berulang
         var positions = new Vector3[n];
         for (int i = 0; i < n; i++)
             positions[i] = nodes[i].transform.position;
@@ -237,6 +236,7 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
         var visited = new bool[n];
 
         const float INF = float.PositiveInfinity;
+
         for (int i = 0; i < n; i++)
         {
             dist[i] = INF;
@@ -246,7 +246,6 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
 
         dist[startIdx] = 0f;
 
-        // Min-heap priority queue
         var pq = new MinHeap(n);
         pq.Push(startIdx, 0f);
 
@@ -255,20 +254,16 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
             var popped = pq.Pop();
             int currentIdx = popped.index;
 
-            if (visited[currentIdx]) continue; // skip entri usang
+            if (visited[currentIdx]) continue;
             visited[currentIdx] = true;
 
-            // Relax semua tetangga
             var currentNode = nodes[currentIdx];
-            var neighbors = currentNode.neighbors;
 
-            for (int k = 0; k < neighbors.Count; k++)
+            foreach (var neighbor in currentNode.neighbors)
             {
-                var neighbor = neighbors[k];
                 int nIdx = indexOf[neighbor];
                 if (visited[nIdx]) continue;
 
-                // Bobot edge = jarak kuadrat antar node
                 float w = (positions[currentIdx] - positions[nIdx]).sqrMagnitude;
                 float alt = dist[currentIdx] + w;
 
@@ -276,50 +271,45 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
                 {
                     dist[nIdx] = alt;
                     prevIndex[nIdx] = currentIdx;
-                    pq.Push(nIdx, alt); // tidak perlu decrease-key; push ulang saja
+                    pq.Push(nIdx, alt);
                 }
             }
         }
 
-        // Bangun dictionary prev (PointNode -> PointNode)
-        var prev = new Dictionary<PointNode, PointNode>(n);
+        var prev = new Dictionary<PointNode, PointNode>();
         for (int i = 0; i < n; i++)
         {
             int p = prevIndex[i];
-            if (p >= 0)
-                prev[nodes[i]] = nodes[p];
+            if (p >= 0) prev[nodes[i]] = nodes[p];
         }
 
         return prev;
     }
 
-    // ---------------------------------------------------------------
-    // MEMBANGUN URUTAN NODE DARI HASIL DIJKSTRA
-    // ---------------------------------------------------------------
+    // ===========================================================
+    // RECONSTRUCT PATH
+    // ===========================================================
     private List<PointNode> ReconstructPath(Dictionary<PointNode, PointNode> prev, PointNode start, PointNode end)
     {
         var path = new List<PointNode>();
 
-        if (end == null) return path;
         if (start == end)
         {
             path.Add(start);
             return path;
         }
 
-        // Jika tidak ada predecessor utk end
-        if (!prev.ContainsKey(end))
-            return path; // tidak ada jalur
+        if (!prev.ContainsKey(end)) return path;
 
-        // Telusuri mundur dari end ke start
         var node = end;
+
         while (node != null)
         {
             path.Insert(0, node);
             if (node == start) break;
+
             if (!prev.TryGetValue(node, out node))
             {
-                // putus; tidak ada jalur lengkap
                 path.Clear();
                 break;
             }
@@ -328,70 +318,54 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
         return path;
     }
 
-    // ---------------------------------------------------------------
-    // GAMBAR GARIS (JALUR) - gunakan shared material untuk hindari GC
-    // ---------------------------------------------------------------
+    // ===========================================================
+    // RENDER GARIS
+    // ===========================================================
     private void DrawPath(List<PointNode> path)
     {
         if (path == null || path.Count == 0) return;
 
         if (sharedLineMaterial == null)
         {
-            // Catatan: Pastikan shader tersedia. Untuk URP/HDRP, sesuaikan shader/material.
             var shader = Shader.Find("Unlit/Color");
             sharedLineMaterial = new Material(shader) { color = Color.cyan };
         }
 
-        GameObject lineObj = new GameObject($"Path_{path[0].name}_to_{path[path.Count - 1].name}");
-        lineObj.transform.SetParent(transform, false);
+        GameObject lineObj = new GameObject("PathRenderer");
+        lineObj.transform.SetParent(transform);
 
         var lr = lineObj.AddComponent<LineRenderer>();
         lr.useWorldSpace = true;
         lr.positionCount = path.Count;
-        lr.material = sharedLineMaterial; // shared, tidak buat material baru
+        lr.material = sharedLineMaterial;
         lr.widthMultiplier = 0.05f;
-        lr.numCornerVertices = 2;
-        lr.numCapVertices = 2;
 
-        // Jika ingin warna per-path tanpa instancing material,
-        // bisa gunakan Gradient color pada LineRenderer:
-        var grad = new Gradient();
-        grad.SetKeys(
-            new GradientColorKey[] { new GradientColorKey(Color.cyan, 0f), new GradientColorKey(Color.cyan, 1f) },
-            new GradientAlphaKey[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) }
-        );
-        lr.colorGradient = grad;
-
-        var positions = new Vector3[path.Count];
+        Vector3[] pos = new Vector3[path.Count];
         for (int i = 0; i < path.Count; i++)
-            positions[i] = path[i].transform.position;
+            pos[i] = path[i].transform.position;
 
-        lr.SetPositions(positions);
+        lr.SetPositions(pos);
     }
 
-    // ---------------------------------------------------------------
-    // RESET SEMUA GARIS
-    // ---------------------------------------------------------------
+    // ===========================================================
+    // CLEAR ALL PATH
+    // ===========================================================
     public void ClearAllPaths()
     {
-        // Hapus semua anak yang namanya diawali "Path_"
         var toDelete = new List<GameObject>();
         foreach (Transform child in transform)
         {
-            if (child.name.StartsWith("Path_"))
+            if (child.name.Contains("PathRenderer"))
                 toDelete.Add(child.gameObject);
         }
 
-        for (int i = 0; i < toDelete.Count; i++)
-            Destroy(toDelete[i]);
-
-        Debug.Log("[GraphManager] Semua garis path dihapus.");
+        foreach (var obj in toDelete)
+            Destroy(obj);
     }
 
-    // ---------------------------------------------------------------
-    // MIN-HEAP PRIORITY QUEUE (untuk Dijkstra)
-    // ---------------------------------------------------------------
-    // Simpan pasangan (index node, priority)
+    // ===========================================================
+    // MIN-HEAP CLASS
+    // ===========================================================
     private struct HeapItem
     {
         public int index;
@@ -410,8 +384,6 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
             heap = capacity > 0 ? new List<HeapItem>(capacity) : new List<HeapItem>();
         }
 
-        public void Clear() => heap.Clear();
-
         public void Push(int index, float priority)
         {
             heap.Add(new HeapItem(index, priority));
@@ -422,7 +394,6 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
         {
             int last = heap.Count - 1;
             var root = heap[0];
-
             heap[0] = heap[last];
             heap.RemoveAt(last);
 
@@ -439,13 +410,12 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
                 int parent = (i - 1) >> 1;
                 if (heap[i].priority < heap[parent].priority)
                 {
-                    Swap(i, parent);
+                    var tmp = heap[i];
+                    heap[i] = heap[parent];
+                    heap[parent] = tmp;
                     i = parent;
                 }
-                else
-                {
-                    break;
-                }
+                else break;
             }
         }
 
@@ -454,7 +424,7 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
             int count = heap.Count;
             while (true)
             {
-                int left = (i << 1) + 1;
+                int left = (i * 2) + 1;
                 int right = left + 1;
                 int smallest = i;
 
@@ -466,16 +436,12 @@ public void FindShortestPath(PointNode start, List<PointNode> destinations)
 
                 if (smallest == i) break;
 
-                Swap(i, smallest);
+                var tmp = heap[i];
+                heap[i] = heap[smallest];
+                heap[smallest] = tmp;
+
                 i = smallest;
             }
-        }
-
-        private void Swap(int a, int b)
-        {
-            var tmp = heap[a];
-            heap[a] = heap[b];
-            heap[b] = tmp;
         }
     }
 }
