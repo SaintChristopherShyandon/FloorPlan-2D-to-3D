@@ -219,6 +219,8 @@ public class GraphManager : MonoBehaviour
     // ===========================================================
     private Dictionary<PointNode, PointNode> DijkstraAll_Heap(PointNode start)
     {
+        Stopwatch sw = null;
+        if (logTimings) sw = Stopwatch.StartNew();
         int n = nodes.Count;
 
         var indexOf = new Dictionary<PointNode, int>(n);
@@ -281,6 +283,20 @@ public class GraphManager : MonoBehaviour
         {
             int p = prevIndex[i];
             if (p >= 0) prev[nodes[i]] = nodes[p];
+        }
+        
+        if (logTimings && sw != null)
+        {
+            sw.Stop();
+
+            double ms = sw.Elapsed.TotalMilliseconds;
+            System.TimeSpan t = sw.Elapsed;
+
+            Debug.Log(
+                $"[GraphManager] Dijkstra runtime = " +
+                $"{t.Hours:D2}:{t.Minutes:D2}:{t.Seconds:D2}.{t.Milliseconds:D3} " +
+                $"(≈ {ms:F2} ms)"
+            );
         }
 
         return prev;
