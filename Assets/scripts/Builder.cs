@@ -11,6 +11,8 @@ public class Builder : MonoBehaviour
     public static float yScale;
     public static float originalScale;
     public static string data;
+    public static float totalBuildingArea = 0f;  // Untuk akumulasi total luas gedung
+    public static int totalPoints = 0;  // Untuk akumulasi total points
 
     [Header("Optional Spawner Reference")]
     public GameObject spwaner;
@@ -94,7 +96,6 @@ public class Builder : MonoBehaviour
             yScale = xScale;
             originalScale = xScale;
 
-            Debug.Log($"[Builder] Skala Global: {originalScale}");
         }
         catch (Exception e)
         {
@@ -133,6 +134,22 @@ public class Builder : MonoBehaviour
             if (PathfindingGrid.Instance != null)
                 PathfindingGrid.Instance.GenerateGrid();
         }
+
+        // Log total luas gedung
+        Debug.Log($"[Builder] Total Luas Gedung: {totalBuildingArea:F2} m²");
+
+        // Hitung rata-rata ketebalan tembok dan log sekali
+        float averageThickness = WallMesh.wallCount > 0 ? WallMesh.totalThickness / WallMesh.wallCount : 0.1f;  // Default 0.1f jika tidak ada tembok
+        Debug.Log($"[Builder] Ketinggian Tembok: 2.50m, Ketebalan Tembok: {averageThickness:F2}m");
+
+        // Log total points generated
+        Debug.Log($"[Builder] Total Points Generated: {totalPoints}");
+
+        // Reset variabel untuk scene berikutnya
+        WallMesh.totalThickness = 0f;
+        WallMesh.wallCount = 0;
+        totalBuildingArea = 0f;
+        totalPoints = 0;
     }
 
     private void CreateObjectForFloor(Point p, string className, Transform parent, float yOffset)
@@ -194,6 +211,15 @@ public class Builder : MonoBehaviour
         float sizeX = maxX - minX;
         float sizeZ = maxZ - minZ;
         float thickness = 0.1f;
+
+        // Hitung luas lantai
+        float floorArea = sizeX * sizeZ;
+
+        // Tambahkan ke total luas gedung
+        totalBuildingArea += floorArea;
+
+        // Log luas per lantai
+        Debug.Log($"[Builder] Luas Lantai {floorData.floor_index}: {floorArea:F2} m²");
 
         GameObject floorPlane = GameObject.CreatePrimitive(PrimitiveType.Cube);
         floorPlane.name = "FloorSurface";
@@ -285,5 +311,8 @@ public class Builder : MonoBehaviour
                 }
             }
         }
+
+        // Akumulasikan total points (untuk floor/roof: numX * numZ * 2 sides)
+        totalPoints += numX * numZ * 2;
     }
 }

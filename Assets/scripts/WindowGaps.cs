@@ -58,7 +58,6 @@ public class WindowGaps : MonoBehaviour
     {
         id = idCount++;
         
-        print("window gaps");
         if (arr[0] != null)
         {
             Destroy(rightBottomMover);

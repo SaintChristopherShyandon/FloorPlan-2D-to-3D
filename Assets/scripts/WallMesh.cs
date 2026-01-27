@@ -14,6 +14,10 @@ public class WallMesh : MonoBehaviour
     Bounds meshBounds;
     Vector3 scale;
 
+    // Variabel statis untuk akumulasi ketebalan tembok
+    public static float totalThickness = 0f;
+    public static int wallCount = 0;
+
     public void setGameObjectReference(GameObject obj)
     {
         ob = obj;
@@ -66,74 +70,73 @@ public class WallMesh : MonoBehaviour
         AddWallPoints(cube);
     }
 
-private void AddWallPoints(GameObject wall)
-{
-    Vector3 scale = wall.transform.localScale;
-    Vector3 center = wall.transform.position;
-    Quaternion rot = wall.transform.rotation;
-
-    float spacing = 0.15f;
-    // Gunakan Math.Max agar minimal ada 1 baris titik walaupun tembok kecil
-    int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
-    int numY = Mathf.Max(1, Mathf.FloorToInt(scale.y / spacing));
-    
-    float halfZ = scale.z / 2f;
-    float offsetOut = 0.02f; // Sedikit keluar dari tembok agar tidak tenggelam
-
-    // Pola: Depan dan Belakang tembok
-    float[] sides = { halfZ + offsetOut, -halfZ - offsetOut };
-
-    foreach (float sideZ in sides)
+    private void AddWallPoints(GameObject wall)
     {
-        for (int i = 0; i <= numX; i++)
+        Vector3 scale = wall.transform.localScale;
+        Vector3 center = wall.transform.position;
+        Quaternion rot = wall.transform.rotation;
+
+        float spacing = 0.15f;
+        // Gunakan Math.Max agar minimal ada 1 baris titik walaupun tembok kecil
+        int numX = Mathf.Max(1, Mathf.FloorToInt(scale.x / spacing));
+        int numY = Mathf.Max(1, Mathf.FloorToInt(scale.y / spacing));
+        
+        float halfZ = scale.z / 2f;
+        float offsetOut = 0.02f; // Sedikit keluar dari tembok agar tidak tenggelam
+
+        // Pola: Depan dan Belakang tembok
+        float[] sides = { halfZ + offsetOut, -halfZ - offsetOut };
+
+        foreach (float sideZ in sides)
         {
-            for (int j = 0; j <= numY; j++)
+            for (int i = 0; i <= numX; i++)
             {
-                float offsetX = -scale.x / 2 + i * spacing;
-                float offsetY = -scale.y / 2 + j * spacing;
+                for (int j = 0; j <= numY; j++)
+                {
+                    float offsetX = -scale.x / 2 + i * spacing;
+                    float offsetY = -scale.y / 2 + j * spacing;
 
-                Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
-                Vector3 worldPos = rot * localPos + center;
+                    Vector3 localPos = new Vector3(offsetX, offsetY, sideZ);
+                    Vector3 worldPos = rot * localPos + center;
 
-                GameObject go = new GameObject("point");
-                go.layer = LayerMask.NameToLayer("Point");
-                // 1. Set Parent dulu
-                go.transform.SetParent(wall.transform, false); 
-                go.transform.position = worldPos;
+                    GameObject go = new GameObject("point");
+                    go.layer = LayerMask.NameToLayer("Point");
+                    // 1. Set Parent dulu
+                    go.transform.SetParent(wall.transform, false); 
+                    go.transform.position = worldPos;
 
-                // 2. PERBAIKAN BENTUK (Agar tidak gepeng)
-                // Kita ambil skala asli (LossyScale) dari Wall
-                Vector3 parentGlobalScale = wall.transform.lossyScale;
-                float desiredSize = 0.05f; // Ukuran bulat yang kamu mau
+                    // 2. PERBAIKAN BENTUK (Agar tidak gepeng)
+                    // Kita ambil skala asli (LossyScale) dari Wall
+                    Vector3 parentGlobalScale = wall.transform.lossyScale;
+                    float desiredSize = 0.05f; // Ukuran bulat yang kamu mau
 
-                // Rumus: Ukuran Target / Ukuran Parent
-                // Ini akan memaksa point tetap bulat 0.05f walau temboknya gepeng
-                go.transform.localScale = new Vector3(
-                    desiredSize / parentGlobalScale.x,
-                    desiredSize / parentGlobalScale.y,
-                    desiredSize / parentGlobalScale.z
-                );
+                    // Rumus: Ukuran Target / Ukuran Parent
+                    // Ini akan memaksa point tetap bulat 0.05f walau temboknya gepeng
+                    go.transform.localScale = new Vector3(
+                        desiredSize / parentGlobalScale.x,
+                        desiredSize / parentGlobalScale.y,
+                        desiredSize / parentGlobalScale.z
+                    );
 
-                go.tag = "point";
+                    go.tag = "point";
 
-                // 3. Collider
-                SphereCollider col = go.AddComponent<SphereCollider>();
-                col.isTrigger = true;
-                
-                // Samakan radius ini dengan yang ada di Floor/Roof (disana kamu pakai 0.5f)
-                // Tapi ingat, radius ini relatif terhadap localScale point. 
-                // Jika visual point kecil, radius 0.5f mungkin cukup besar (jangkauan luas).
-                col.radius = 0.5f; 
+                    // 3. Collider
+                    SphereCollider col = go.AddComponent<SphereCollider>();
+                    col.isTrigger = true;
+                    
+                    // Samakan radius ini dengan yang ada di Floor/Roof (disana kamu pakai 0.5f)
+                    // Tapi ingat, radius ini relatif terhadap localScale point. 
+                    // Jika visual point kecil, radius 0.5f mungkin cukup besar (jangkauan luas).
+                    col.radius = 0.5f; 
 
-                Rigidbody rb = go.AddComponent<Rigidbody>();
-                rb.isKinematic = true;
+                    Rigidbody rb = go.AddComponent<Rigidbody>();
+                    rb.isKinematic = true;
 
-                go.AddComponent<PointNode>();
+                    go.AddComponent<PointNode>();
+                }
             }
         }
     }
-}
-
 
     private Quaternion getAngle(char c)
     {
@@ -163,10 +166,24 @@ private void AddWallPoints(GameObject wall)
         float scaleY = yDiff / meshBoundY;
         float scaleX = xDiff / meshBoundX;
 
+        Vector3 finalScale;
+        float thickness;
         if (rotation == 'v')
-            return new Vector3(scaleY * Builder.yScale, 2.5f, scaleX * Builder.xScale);
+        {
+            finalScale = new Vector3(scaleY * Builder.yScale, 2.5f, scaleX * Builder.xScale);
+            thickness = scaleX * Builder.xScale;
+        }
         else
-            return new Vector3(scaleX * Builder.xScale, 2.5f, scaleY * Builder.yScale);
+        {
+            finalScale = new Vector3(scaleX * Builder.xScale, 2.5f, scaleY * Builder.yScale);
+            thickness = scaleY * Builder.yScale;
+        }
+
+        // Akumulasikan ketebalan untuk rata-rata
+        totalThickness += thickness;
+        wallCount++;
+
+        return finalScale;
     }
 
     public Vector3 getCoordinates()

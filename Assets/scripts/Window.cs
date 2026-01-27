@@ -4,21 +4,23 @@ using UnityEngine;
 
 public class Window : MonoBehaviour
 {
-    // Start is called before the first frame update
     public float x1, x2, y1, y2;
 
-    // VARIABEL BARU: Offset Ketinggian Lantai
-    private float floorYOffset; 
+    private float floorYOffset;
 
     GameObject ob;
     public char rotation;
 
     Bounds meshBounds;
+
+    [Header("Frame / Glass Settings")]
+    [SerializeField] private float frameThickness = 0.2f;     // frame thickness
+    [SerializeField] private float glassBottomOffset = 0.35f; // glass is higher than bottom
+
     public void setGameObjectReference(GameObject obj)
     {
         ob = obj;
     }
-
 
     void Start()
     {
@@ -32,8 +34,6 @@ public class Window : MonoBehaviour
         float midX = x1 + (Mathf.Abs(x2 - x1) / 2);
         float midY = y1 + (Mathf.Abs(y2 - y1) / 2);
 
-
-        // Asumsi WindowGaps ada
         WindowGaps windowGapsComponent = prefabInstance.AddComponent<WindowGaps>();
         windowGapsComponent.setParentValues(midX * Builder.xScale, midY * Builder.yScale);
         windowGapsComponent.setOrientation(rotation);
@@ -43,96 +43,144 @@ public class Window : MonoBehaviour
         ob.transform.position = coordinates;
         prefabInstance.transform.parent = ob.transform;
 
-
         meshBounds = prefabInstance.GetComponent<MeshFilter>().mesh.bounds;
-        Vector3 scale = getScale();
+        prefabInstance.transform.localScale = getScale();
 
-        prefabInstance.transform.localScale = scale;
-
+        AdjustGlassSize();
 
         BoxCollider mainBox = prefabInstance.AddComponent<BoxCollider>();
         mainBox.isTrigger = true;
-        prefabInstance.AddComponent<BoxCollider>();
+
         BoxCollider leftMover = prefabInstance.AddComponent<BoxCollider>();
         BoxCollider rightMover = prefabInstance.AddComponent<BoxCollider>();
 
         windowGapsComponent.setBoxColliders(mainBox, leftMover, rightMover);
-        /*ob.AddComponent<BoxCollider>();
-        BoxCollider bc = ob.GetComponent<BoxCollider>();
-        bc.bounds = prefabInstance.GetComponent<BoxCollider>().bounds;*/
-        prefabInstance.AddComponent<Rigidbody>();
-        prefabInstance.GetComponent<Rigidbody>().isKinematic = true;
 
+        Rigidbody rb = prefabInstance.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
 
+        AddWindowPoints(prefabInstance);
     }
 
-    /// <summary>
-    /// Mengembalikan koordinat 3D jendela, menambahkan offset Y untuk ketinggian lantai.
-    /// </summary>
     public Vector3 getCoordinates()
     {
         float xCenter = x1 + (Mathf.Abs(x2 - x1) / 2);
         float yCenter = y1 + (Mathf.Abs(y2 - y1) / 2);
-        // Tinggi jendela standar (misalnya 0, di lantai) + Offset Lantai
-        return new Vector3(yCenter * Builder.yScale, 0f + floorYOffset, xCenter * Builder.xScale);
+        return new Vector3(yCenter * Builder.yScale, floorYOffset, xCenter * Builder.xScale);
     }
+
     public Vector3 getScale()
     {
         if (rotation == 'v')
         {
             float yDiff = Mathf.Abs(y1 - y2);
-            float meshBound = meshBounds.size.x;
-            float scale = yDiff / meshBound;
-            Vector3 newScale = new Vector3(scale * Builder.yScale, 1, 1);
-            return newScale;
+            float scale = yDiff / meshBounds.size.x;
+            return new Vector3(scale * Builder.yScale, 1, 1);
         }
-        // here where you can handle diagonal doors in the future
-
         else
         {
             float xDiff = Mathf.Abs(x1 - x2);
-            float meshBound = meshBounds.size.x;
-            float scale = xDiff / meshBound;
-            Vector3 newScale = new Vector3(scale * Builder.xScale, 1, 1);
-            return newScale;
+            float scale = xDiff / meshBounds.size.x;
+            return new Vector3(scale * Builder.xScale, 1, 1);
         }
     }
 
-    /// <summary>
-    /// Mengatur batas-batas Bounding Box dan Offset Lantai.
-    /// </summary>
-    // KUNCI PERBAIKAN: Menambahkan parameter ke-5 (yOffset)
     public void setPoints(float x1, float y1, float x2, float y2, float yOffset)
     {
         this.x1 = x1;
         this.x2 = x2;
         this.y1 = y1;
         this.y2 = y2;
-        this.floorYOffset = yOffset; // Simpan offset lantai
+        this.floorYOffset = yOffset;
     }
 
     private char getRotation()
     {
-        float xDiff = Mathf.Abs(x1 - x2);
-        float yDiff = Mathf.Abs(y1 - y2);
-        if (xDiff > yDiff)
-        {
-            return 'h';
-        }
-        if (yDiff > xDiff)
-        {
-            return 'v';
-        }
-        return 'n';
+        return Mathf.Abs(x1 - x2) > Mathf.Abs(y1 - y2) ? 'h' : 'v';
     }
+
     private Quaternion getAngle(char c)
     {
-        switch (c)
-        {
-            case 'v': return Quaternion.identity;
+        return c == 'h' ? Quaternion.Euler(0, 90, 0) : Quaternion.identity;
+    }
 
-            case 'h': return Quaternion.Euler(0, 90, 0);
-            default: return Quaternion.identity;
+    private void AdjustGlassSize()
+    {
+        if (meshBounds.size == Vector3.zero)
+            return;
+
+        float totalHeight = meshBounds.size.y;
+        float minFrameHeight = 0.4f; // Minimum combined frame thickness top + bottom
+
+        float maxGlassHeight = totalHeight - (minFrameHeight + frameThickness);
+
+        if (glassBottomOffset > maxGlassHeight)
+        {
+            glassBottomOffset = Mathf.Max(0f, maxGlassHeight);
         }
+    }
+
+    private void AddWindowPoints(GameObject window)
+    {
+        MeshFilter mf = window.GetComponent<MeshFilter>();
+        if (mf == null || mf.mesh == null) return;
+
+        Bounds b = mf.mesh.bounds;
+
+        float spacingX = 0.12f;
+        float spacingY = 0.06f;
+        float zOffset = 0.02f;
+
+        float outerMinX = b.min.x + frameThickness / 2f - 0.01f;
+        float outerMaxX = b.max.x - frameThickness / 2f + 0.01f;
+        float outerMinY = b.min.y + frameThickness / 2f - 0.01f;
+        float outerMaxY = b.max.y - frameThickness / 2f + 0.01f;
+
+        float innerMinX = b.min.x + frameThickness - 0.02f;
+        float innerMaxX = b.max.x - frameThickness + 0.02f;
+        float innerMinY = b.min.y + glassBottomOffset - 0.02f;
+        float innerMaxY = b.max.y - frameThickness + 0.02f;
+
+        float zFront = b.max.z + zOffset;
+        float zBack = b.min.z - zOffset;
+
+        for (float x = outerMinX; x <= outerMaxX; x += spacingX)
+        {
+            for (float y = outerMinY; y <= outerMaxY; y += spacingY)
+            {
+                bool inFrameVertically = y >= outerMinY && y <= outerMaxY;
+                bool inFrameHorizontally = x >= outerMinX && x <= outerMaxX;
+
+                // Fill the ring-shaped frame area around the glass:
+                bool inRing = ((x <= innerMinX || x >= innerMaxX) && inFrameVertically) ||
+                              ((y <= innerMinY || y >= innerMaxY) && inFrameHorizontally);
+
+                if (inRing)
+                {
+                    SpawnPoint(window.transform, new Vector3(x, y, zFront));
+                    SpawnPoint(window.transform, new Vector3(x, y, zBack));
+                }
+            }
+        }
+    }
+
+    private void SpawnPoint(Transform parent, Vector3 localPos)
+    {
+        GameObject go = new GameObject("point");
+        go.layer = LayerMask.NameToLayer("Point");
+        go.tag = "point";
+
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPos;
+        go.transform.localScale = Vector3.one * 0.05f;
+
+        SphereCollider col = go.AddComponent<SphereCollider>();
+        col.isTrigger = true;
+        col.radius = 0.5f;
+
+        Rigidbody rb = go.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
+
+        go.AddComponent<PointNode>();
     }
 }
